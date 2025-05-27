@@ -9,7 +9,7 @@
   <body>
     <div class="app-container">
       <div class="sidebar">
-        <h2 style="margin-bottom: 1rem; color: #333">📁 서버 목록</h2>
+        <h2 style="margin-bottom: 1rem; color: #333">서버 목록</h2>
 
         <div class="path-display" id="workingDirectory">
           작업 경로: 로딩 중...
@@ -20,7 +20,7 @@
           onclick="addNewServer()"
           style="width: 100%; margin-bottom: 1rem"
         >
-          ➕ 새 서버 추가
+          새 서버 추가
         </button>
 
         <button
@@ -28,7 +28,7 @@
           onclick="refreshServerList()"
           style="width: 100%; margin-bottom: 1rem"
         >
-          🔄 목록 새로고침
+          목록 새로고침
         </button>
 
         <button
@@ -36,7 +36,7 @@
           onclick="openTemplateEditor()"
           style="width: 100%; margin-bottom: 1rem; background: #f39c12"
         >
-          📋 마스터 템플릿 편집
+          마스터 템플릿 편집
         </button>
 
         <!-- 서버 목록 컨테이너 -->
@@ -44,7 +44,7 @@
           <!-- 빈 상태 -->
           <div id="emptyServerState" class="empty-state hidden">
             <div style="text-align: center; padding: 2rem; color: #666">
-              <div style="font-size: 2rem; margin-bottom: 1rem">📄</div>
+              <div style="font-size: 2rem; margin-bottom: 1rem">파일</div>
               <p>설정 파일이 없습니다.</p>
               <p style="font-size: 0.85rem">새 서버를 추가해보세요.</p>
             </div>
@@ -63,7 +63,7 @@
 
       <div class="main-content">
         <div class="header">
-          <h1>⚙️ JSON 설정 관리자</h1>
+          <h1>JSON 설정 관리자</h1>
           <p>그룹웨어 메신저 설정을 쉽게 관리하세요</p>
         </div>
 
@@ -84,7 +84,7 @@
                   disabled
                   id="backupBtn"
                 >
-                  💾 백업
+                  백업
                 </button>
                 <button
                   class="btn btn-primary"
@@ -92,7 +92,7 @@
                   disabled
                   id="saveBtn"
                 >
-                  💾 저장
+                  저장
                 </button>
               </div>
             </div>
@@ -127,7 +127,7 @@
     <div id="addServerModal" class="modal">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>🖥️ 새 서버 설정 파일 추가</h3>
+          <h3>새 서버 설정 파일 추가</h3>
         </div>
         <div>
           <div class="field-group">
@@ -170,14 +170,23 @@
 
     <!-- 템플릿 편집 모달 -->
     <div id="templateModal" class="modal">
-      <div class="modal-content" style="width: 800px; max-width: 90vw">
+      <div
+        class="modal-content"
+        style="width: 800px; max-width: 90vw; max-height: 90vh"
+      >
         <div class="modal-header">
-          <h3>📋 마스터 템플릿 편집</h3>
+          <h3>마스터 템플릿 편집</h3>
           <p style="color: #666; margin-top: 0.5rem">
             새 서버 생성시 기본으로 사용될 설정입니다
           </p>
         </div>
-        <div style="max-height: 400px; overflow-y: auto">
+        <div
+          style="
+            max-height: calc(90vh - 200px);
+            overflow-y: auto;
+            padding-right: 10px;
+          "
+        >
           <!-- 동적으로 생성되는 템플릿 에디터 -->
           <div id="templateEditor">
             <!-- JavaScript에서 동적으로 생성됨 -->
@@ -188,25 +197,115 @@
             취소
           </button>
           <button class="btn btn-primary" onclick="saveTemplate()">
-            📋 템플릿 저장
+            템플릿 저장
           </button>
         </div>
       </div>
     </div>
 
-    <div class="notification" id="notification"></div>
+    <!-- 템플릿에서 항목 추가 모달 -->
+    <div id="addFromTemplateModal" class="modal">
+      <div class="modal-content" style="width: 600px; max-width: 90vw">
+        <div class="modal-header">
+          <h3>템플릿에서 항목 추가</h3>
+          <p style="color: #666; margin-top: 0.5rem">
+            현재 서버 설정에 없는 템플릿 항목들을 선택해서 추가할 수 있습니다
+          </p>
+        </div>
+        <div style="max-height: 400px; overflow-y: auto">
+          <div id="templateItemsList">
+            <!-- 누락된 템플릿 항목들이 동적으로 생성됨 -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            class="btn btn-secondary"
+            onclick="closeAddFromTemplateModal()"
+          >
+            취소
+          </button>
+          <button class="btn btn-primary" onclick="addSelectedTemplateItems()">
+            선택한 항목 추가
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- 서버 아이템 템플릿 -->
     <template id="serverItemTemplate">
       <div class="server-item">
         <div class="server-info">
           <h3 class="server-name"></h3>
-          <p class="server-filename"></p>
+          <p class="server-details">서버 폴더</p>
         </div>
         <div class="server-actions">
-          <button class="btn btn-danger btn-small delete-btn">🗑️</button>
+          <button class="btn btn-danger btn-small delete-btn">삭제</button>
         </div>
       </div>
+    </template>
+
+    <!-- 설정 섹션 템플릿 -->
+    <template id="configSectionTemplate">
+      <div class="config-section">
+        <div class="section-header">
+          <span class="toggle">▼</span>
+          <span class="section-title"></span>
+        </div>
+        <div class="section-content expanded"></div>
+      </div>
+    </template>
+
+    <!-- 필드 그룹 템플릿들 -->
+    <template id="textFieldTemplate">
+      <div class="field-group">
+        <label class="field-label"></label>
+        <input type="text" class="field-input" />
+      </div>
+    </template>
+
+    <template id="numberFieldTemplate">
+      <div class="field-group">
+        <label class="field-label"></label>
+        <input type="number" class="field-input" />
+      </div>
+    </template>
+
+    <template id="checkboxFieldTemplate">
+      <div class="field-group">
+        <label class="field-label"></label>
+        <div class="field-checkbox-group">
+          <input type="checkbox" class="field-checkbox" />
+        </div>
+      </div>
+    </template>
+
+    <template id="arrayFieldTemplate">
+      <div class="field-group">
+        <label class="field-label"></label>
+        <div class="array-container">
+          <table class="array-table">
+            <thead>
+              <tr>
+                <th style="width: 60%">값</th>
+                <th style="width: 40%">작업</th>
+              </tr>
+            </thead>
+            <tbody class="array-tbody"></tbody>
+          </table>
+          <button type="button" class="array-add-btn">+ 항목 추가</button>
+        </div>
+      </div>
+    </template>
+
+    <template id="arrayRowTemplate">
+      <tr class="array-row">
+        <td>
+          <input type="text" class="array-input" />
+        </td>
+        <td>
+          <button type="button" class="array-delete-btn">삭제</button>
+        </td>
+      </tr>
     </template>
 
     <script src="main.js"></script>

@@ -11,10 +11,10 @@ function waitForTauri() {
           window.__TAURI__.tauri?.invoke;
 
         if (invoke) {
-          console.log("✅ Tauri API 로드 완료");
+          console.log("Tauri API 로드 완료");
           resolve(true);
         } else {
-          console.error("❌ invoke 함수를 찾을 수 없음");
+          console.error("invoke 함수를 찾을 수 없음");
           resolve(false);
         }
       } else {
@@ -34,20 +34,15 @@ let workingDirectory = "";
 
 // DOM 요소들
 const elements = {
-  // 서버 목록 관련
   emptyServerState: () => document.getElementById("emptyServerState"),
   loadingState: () => document.getElementById("loadingState"),
   serverListContainer: () => document.getElementById("serverListContainer"),
   workingDirectory: () => document.getElementById("workingDirectory"),
-
-  // 에디터 관련
   configEditor: () => document.getElementById("configEditor"),
   currentServerTitle: () => document.getElementById("currentServerTitle"),
   currentServerPath: () => document.getElementById("currentServerPath"),
   backupBtn: () => document.getElementById("backupBtn"),
   saveBtn: () => document.getElementById("saveBtn"),
-
-  // 기타
   statusText: () => document.getElementById("statusText"),
   notification: () => document.getElementById("notification"),
 };
@@ -59,10 +54,9 @@ async function init() {
     const pathEl = elements.workingDirectory();
     if (pathEl) pathEl.textContent = `작업 경로: ${workingDirectory}`;
 
-    // 마스터 템플릿 로드
     await loadTemplate();
     await refreshServerList();
-    console.log("🎉 앱 초기화 완료");
+    console.log("앱 초기화 완료");
   } catch (error) {
     console.error("초기화 오류:", error);
     showNotification("초기화 중 오류가 발생했습니다: " + error, "error");
@@ -92,7 +86,7 @@ function getDefaultTemplate() {
   };
 }
 
-// 🏗️ 서버 목록 새로고침 (폴더 기반)
+// 서버 목록 새로고침
 async function refreshServerList() {
   showLoadingState(true);
 
@@ -101,12 +95,8 @@ async function refreshServerList() {
       directory: workingDirectory,
     });
 
-    serverList = servers.map((server) => ({
-      name: server.name,
-      folderPath: server.folder_path,
-      latestFile: server.latest_file,
-      latestDate: server.latest_date,
-      fileCount: server.file_count,
+    serverList = servers.map((serverName) => ({
+      name: serverName,
     }));
 
     renderServerList();
@@ -151,37 +141,19 @@ function renderServerList() {
   }
 }
 
-// 🎯 서버 아이템 생성 (새 구조)
+// 서버 아이템 생성 (템플릿 사용)
 function createServerItem(server) {
-  const div = document.createElement("div");
-  div.className = "server-item";
+  const template = document.getElementById("serverItemTemplate");
+  const clone = template.content.cloneNode(true);
 
-  const hasFiles = server.fileCount > 0;
-  const statusColor = hasFiles ? "#28a745" : "#ffc107";
-  const statusText = hasFiles ? `${server.fileCount}개 파일` : "빈 폴더";
+  // 데이터 바인딩
+  clone.querySelector(".server-name").textContent = server.name;
 
-  div.innerHTML = `
-    <div class="server-info">
-      <h3 class="server-name">${server.name}</h3>
-      <p class="server-details">
-        <span style="color: ${statusColor};">📄 ${statusText}</span>
-        ${
-          server.latestDate
-            ? `<span style="margin-left: 1rem;">📅 ${server.latestDate}</span>`
-            : ""
-        }
-      </p>
-    </div>
-    <div class="server-actions">
-      <button class="btn btn-danger btn-small delete-btn">🗑️</button>
-    </div>
-  `;
+  // 이벤트 바인딩
+  const itemEl = clone.querySelector(".server-item");
+  itemEl.onclick = () => selectServer(server);
 
-  // 클릭 이벤트
-  div.onclick = () => selectServer(server);
-
-  // 삭제 버튼
-  const deleteBtn = div.querySelector(".delete-btn");
+  const deleteBtn = clone.querySelector(".delete-btn");
   deleteBtn.onclick = (e) => {
     e.stopPropagation();
     deleteServer(server);
@@ -189,23 +161,19 @@ function createServerItem(server) {
 
   // 활성 상태 표시
   if (currentServer?.name === server.name) {
-    div.classList.add("active");
+    itemEl.classList.add("active");
   }
 
-  return div;
+  return clone;
 }
 
-// 🎯 서버 선택 (최신 파일 로드)
+// 서버 선택 (최신 파일 로드)
 async function selectServer(server) {
-  if (!server.latestFile) {
-    showNotification("이 서버에는 설정 파일이 없습니다.", "warning");
-    return;
-  }
-
   try {
     updateStatus("설정 파일을 읽는 중...");
-    const content = await invoke("read_json_file", {
-      filePath: server.latestFile,
+    const content = await invoke("get_latest_server_config", {
+      baseDirectory: workingDirectory,
+      serverName: server.name,
     });
 
     currentServer = server;
@@ -213,8 +181,8 @@ async function selectServer(server) {
 
     updateServerInfo(server);
     renderConfigEditor();
-    renderServerList(); // 활성 상태 업데이트
-    updateStatus(`설정 파일을 성공적으로 로드했습니다. (${server.latestDate})`);
+    renderServerList();
+    updateStatus("설정 파일을 성공적으로 로드했습니다.");
   } catch (error) {
     console.error("파일 읽기 오류:", error);
     showNotification("설정 파일을 읽을 수 없습니다: " + error, "error");
@@ -229,16 +197,13 @@ function updateServerInfo(server) {
   const backupBtn = elements.backupBtn();
   const saveBtn = elements.saveBtn();
 
-  if (titleEl)
-    titleEl.textContent = `${server.name} (${
-      server.latestDate || "날짜 없음"
-    })`;
-  if (pathEl) pathEl.textContent = server.latestFile;
+  if (titleEl) titleEl.textContent = server.name;
+  if (pathEl) pathEl.textContent = `${workingDirectory}\\${server.name}`;
   if (backupBtn) backupBtn.disabled = false;
   if (saveBtn) saveBtn.disabled = false;
 }
 
-// 🚀 동적 설정 에디터 렌더링
+// 동적 설정 에디터 렌더링
 function renderConfigEditor() {
   const editor = elements.configEditor();
   if (!editor) return;
@@ -250,22 +215,26 @@ function renderConfigEditor() {
 
   editor.className = "editor-loaded";
 
-  // 기존 내용 제거
   const configContent = editor.querySelector(".config-content");
   if (configContent) {
     configContent.innerHTML = "";
 
-    // JSON 구조를 기반으로 동적 폼 생성
+    // 템플릿에서 항목 추가 버튼
+    const addFromTemplateBtn = document.createElement("button");
+    addFromTemplateBtn.className = "btn btn-secondary";
+    addFromTemplateBtn.style.marginBottom = "1rem";
+    addFromTemplateBtn.textContent = "템플릿에서 항목 추가";
+    addFromTemplateBtn.onclick = () => openAddFromTemplateModal();
+    configContent.appendChild(addFromTemplateBtn);
+
     const form = createDynamicForm(currentConfig);
     configContent.appendChild(form);
   }
 }
 
-// 🎯 동적 폼 생성 함수
+// 동적 폼 생성
 function createDynamicForm(obj, path = "") {
   const container = document.createElement("div");
-
-  // 객체의 키를 카테고리별로 그룹화
   const categories = groupConfigKeys(obj);
 
   for (const [categoryName, keys] of Object.entries(categories)) {
@@ -276,83 +245,53 @@ function createDynamicForm(obj, path = "") {
   return container;
 }
 
-// 설정 키를 카테고리별로 그룹화
+// 설정 키 그룹화 (동적)
 function groupConfigKeys(obj) {
-  const categories = {
-    "🔧 기본 설정": [],
-    "🔐 보안 설정": [],
-    "📱 앱 설정": [],
-    "👥 사용자 설정": [],
-    "🎨 UI 설정": [],
-    "🔗 URL 설정": [],
-    "⚙️ 기타 설정": [],
-  };
+  const categories = {};
+
+  // 루트 레벨 단순 필드들을 기본 설정으로
+  const rootFields = [];
 
   for (const key of Object.keys(obj)) {
-    if (key.includes("Company") || key.includes("default")) {
-      categories["🔧 기본 설정"].push(key);
-    } else if (
-      key.includes("IP") ||
-      key.includes("token") ||
-      key.includes("sso") ||
-      key.includes("password")
+    if (
+      typeof obj[key] === "object" &&
+      obj[key] !== null &&
+      !Array.isArray(obj[key])
     ) {
-      categories["🔐 보안 설정"].push(key);
-    } else if (
-      key.includes("app") ||
-      key.includes("App") ||
-      key.includes("mobile") ||
-      key.includes("download")
-    ) {
-      categories["📱 앱 설정"].push(key);
-    } else if (
-      key.includes("login") ||
-      key.includes("user") ||
-      key.includes("admin")
-    ) {
-      categories["👥 사용자 설정"].push(key);
-    } else if (
-      key.includes("menu") ||
-      key.includes("message") ||
-      key.includes("color") ||
-      key.includes("theme")
-    ) {
-      categories["🎨 UI 설정"].push(key);
-    } else if (
-      key.includes("Url") ||
-      key.includes("url") ||
-      key.includes("Uri")
-    ) {
-      categories["🔗 URL 설정"].push(key);
+      // 중첩 객체는 개별 카테고리로
+      const categoryName = getCategoryName(key);
+      categories[categoryName] = [key];
     } else {
-      categories["⚙️ 기타 설정"].push(key);
+      // 단순 값들은 기본 설정으로
+      rootFields.push(key);
     }
   }
 
-  // 빈 카테고리 제거
-  return Object.fromEntries(
-    Object.entries(categories).filter(([_, keys]) => keys.length > 0)
-  );
+  // 기본 설정이 있으면 추가
+  if (rootFields.length > 0) {
+    categories["기본 설정"] = rootFields;
+  }
+
+  return categories;
 }
 
-// 설정 섹션 생성
+// 카테고리 이름 생성 (동적)
+function getCategoryName(key) {
+  // camelCase를 읽기 좋은 형태로 변환
+  return key
+    .replace(/([A-Z])/g, " $1") // camelCase 분리
+    .replace(/^./, (str) => str.toUpperCase()) // 첫 글자 대문자
+    .trim();
+}
+
+// 설정 섹션 생성 (템플릿 사용)
 function createConfigSection(categoryName, obj, keys, basePath) {
-  const section = document.createElement("div");
-  section.className = "config-section";
+  const template = document.getElementById("configSectionTemplate");
+  const clone = template.content.cloneNode(true);
 
-  // 섹션 헤더
-  const header = document.createElement("div");
-  header.className = "section-header";
-  header.innerHTML = `
-    <span class="toggle">▼</span>
-    <span class="section-title">${categoryName}</span>
-  `;
+  clone.querySelector(".section-title").textContent = categoryName;
+  const content = clone.querySelector(".section-content");
 
-  // 섹션 내용
-  const content = document.createElement("div");
-  content.className = "section-content expanded";
-
-  // 각 키에 대한 필드 생성
   keys.forEach((key) => {
     const field = createDynamicField(
       key,
@@ -362,87 +301,73 @@ function createConfigSection(categoryName, obj, keys, basePath) {
     content.appendChild(field);
   });
 
-  // 토글 기능
+  const header = clone.querySelector(".section-header");
   header.addEventListener("click", () => {
     const isExpanded = content.classList.contains("expanded");
     content.classList.toggle("expanded");
     header.querySelector(".toggle").textContent = isExpanded ? "▶" : "▼";
   });
 
-  section.appendChild(header);
-  section.appendChild(content);
-
-  return section;
+  return clone;
 }
 
-// 🎯 동적 필드 생성 (타입별 자동 감지)
+// 동적 필드 생성
 function createDynamicField(key, value, path) {
-  const fieldGroup = document.createElement("div");
-  fieldGroup.className = "field-group";
-
-  const label = document.createElement("label");
-  label.className = "field-label";
-  label.textContent = formatFieldLabel(key);
-
-  let input;
-
   if (typeof value === "boolean") {
-    input = createCheckboxField(key, value, path);
+    return createCheckboxField(key, value, path);
   } else if (typeof value === "number") {
-    input = createNumberField(key, value, path);
+    return createNumberField(key, value, path);
   } else if (typeof value === "string") {
-    input = createTextField(key, value, path);
+    return createTextField(key, value, path);
   } else if (Array.isArray(value)) {
     return createArrayField(key, value, path);
   } else if (typeof value === "object" && value !== null) {
     return createNestedObjectField(key, value, path);
   } else {
-    input = createTextField(key, value || "", path);
+    return createTextField(key, value || "", path);
   }
-
-  if (input) {
-    fieldGroup.appendChild(label);
-    fieldGroup.appendChild(input);
-  }
-
-  return fieldGroup;
 }
 
 // 체크박스 필드 생성
 function createCheckboxField(key, value, path) {
-  const container = document.createElement("div");
-  container.className = "field-checkbox-group";
+  const template = document.getElementById("checkboxFieldTemplate");
+  const clone = template.content.cloneNode(true);
 
-  const checkbox = document.createElement("input");
-  checkbox.type = "checkbox";
-  checkbox.className = "field-checkbox";
+  clone.querySelector(".field-label").textContent = formatFieldLabel(key);
+  const checkbox = clone.querySelector(".field-checkbox");
   checkbox.checked = value;
+
   checkbox.addEventListener("change", () => {
     updateConfigValue(path, checkbox.checked);
   });
 
-  container.appendChild(checkbox);
-  return container;
+  return clone;
 }
 
 // 숫자 필드 생성
 function createNumberField(key, value, path) {
-  const input = document.createElement("input");
-  input.type = "number";
-  input.className = "field-input";
+  const template = document.getElementById("numberFieldTemplate");
+  const clone = template.content.cloneNode(true);
+
+  clone.querySelector(".field-label").textContent = formatFieldLabel(key);
+  const input = clone.querySelector(".field-input");
   input.value = value;
+
   input.addEventListener("change", () => {
     updateConfigValue(path, parseInt(input.value) || 0);
   });
 
-  return input;
+  return clone;
 }
 
-// 텍스트 필드 생성
+// 텍스트 필드 생성 (템플릿 사용)
 function createTextField(key, value, path) {
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "field-input";
+  const template = document.getElementById("textFieldTemplate");
+  const clone = template.content.cloneNode(true);
+
+  // 데이터 바인딩
+  clone.querySelector(".field-label").textContent = formatFieldLabel(key);
+  const input = clone.querySelector(".field-input");
   input.value = value;
 
   // URL인 경우 특별 스타일 적용
@@ -450,87 +375,79 @@ function createTextField(key, value, path) {
     typeof value === "string" &&
     (value.includes("http") || key.toLowerCase().includes("url"))
   ) {
-    input.style.fontFamily = "monospace";
-    input.style.fontSize = "0.85rem";
+    input.classList.add("url-field");
   }
 
+  // 이벤트 바인딩
   input.addEventListener("change", () => {
     updateConfigValue(path, input.value);
   });
 
-  return input;
+  return clone;
 }
 
-// 배열 필드 생성
+// 배열 필드 생성 (테이블 스타일)
 function createArrayField(key, array, path) {
-  const fieldGroup = document.createElement("div");
-  fieldGroup.className = "field-group";
+  const template = document.getElementById("arrayFieldTemplate");
+  const clone = template.content.cloneNode(true);
 
-  const label = document.createElement("label");
-  label.className = "field-label";
-  label.textContent = formatFieldLabel(key);
+  clone.querySelector(".field-label").textContent = formatFieldLabel(key);
+  const tbody = clone.querySelector(".array-tbody");
 
-  const arrayContainer = document.createElement("div");
-  arrayContainer.className = "array-container";
-
-  // 배열 아이템들 렌더링
+  // 배열 아이템들을 테이블 행으로 렌더링
   array.forEach((item, index) => {
-    const itemElement = createArrayItem(item, `${path}[${index}]`, index);
-    arrayContainer.appendChild(itemElement);
+    const row = createArrayRow(item, `${path}[${index}]`, index);
+    tbody.appendChild(row);
   });
 
-  // 새 아이템 추가 버튼
-  const addButton = document.createElement("button");
-  addButton.type = "button";
-  addButton.className = "btn btn-secondary btn-small";
-  addButton.textContent = "➕ 추가";
+  // 추가 버튼 이벤트
+  const addButton = clone.querySelector(".array-add-btn");
   addButton.addEventListener("click", () => {
-    addArrayItem(array, path, arrayContainer);
+    addArrayItem(array, path, tbody);
   });
 
-  fieldGroup.appendChild(label);
-  fieldGroup.appendChild(arrayContainer);
-  fieldGroup.appendChild(addButton);
-
-  return fieldGroup;
+  return clone;
 }
 
-// 배열 아이템 생성
-function createArrayItem(item, itemPath, index) {
-  const itemDiv = document.createElement("div");
-  itemDiv.className = "array-item";
+// 배열 행 생성
+function createArrayRow(item, itemPath, index) {
+  const template = document.getElementById("arrayRowTemplate");
+  const clone = template.content.cloneNode(true);
+
+  const input = clone.querySelector(".array-input");
+  const deleteBtn = clone.querySelector(".array-delete-btn");
 
   if (typeof item === "object") {
-    // 객체인 경우 중첩 폼 생성
-    const nestedForm = createDynamicForm(item, itemPath);
-    itemDiv.appendChild(nestedForm);
+    // 객체인 경우 JSON 문자열로 표시
+    input.value = JSON.stringify(item);
+    input.addEventListener("change", () => {
+      try {
+        const parsed = JSON.parse(input.value);
+        updateConfigValue(itemPath, parsed);
+      } catch (e) {
+        console.error("JSON 파싱 오류:", e);
+        input.style.borderColor = "#e74c3c";
+      }
+    });
   } else {
     // 단순 값인 경우
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "field-input";
     input.value = item;
     input.addEventListener("change", () => {
       updateConfigValue(itemPath, input.value);
     });
-    itemDiv.appendChild(input);
   }
 
   // 삭제 버튼
-  const deleteBtn = document.createElement("button");
-  deleteBtn.type = "button";
-  deleteBtn.className = "btn btn-danger btn-small";
-  deleteBtn.textContent = "🗑️";
-  deleteBtn.style.marginTop = "0.5rem";
   deleteBtn.addEventListener("click", () => {
-    removeArrayItem(itemPath, itemDiv);
+    if (confirm("이 항목을 삭제하시겠습니까?")) {
+      removeArrayRow(itemPath, clone.querySelector(".array-row"));
+    }
   });
 
-  itemDiv.appendChild(deleteBtn);
-  return itemDiv;
+  return clone;
 }
 
-// 중첩 객체 필드 생성
+// 중첩 객체 필드 생성 (모든 객체를 테이블로)
 function createNestedObjectField(key, obj, path) {
   const fieldGroup = document.createElement("div");
   fieldGroup.className = "field-group";
@@ -541,19 +458,146 @@ function createNestedObjectField(key, obj, path) {
   label.style.fontSize = "1.1rem";
   label.style.fontWeight = "600";
   label.style.color = "#667eea";
+  label.style.marginBottom = "1rem";
 
-  const nestedContainer = document.createElement("div");
-  nestedContainer.style.marginLeft = "1rem";
-  nestedContainer.style.paddingLeft = "1rem";
-  nestedContainer.style.borderLeft = "3px solid rgba(102, 126, 234, 0.3)";
+  const table = document.createElement("table");
+  table.className = "nested-object-table";
 
-  const nestedForm = createDynamicForm(obj, path);
-  nestedContainer.appendChild(nestedForm);
+  // 테이블 헤더
+  const thead = document.createElement("thead");
+  thead.innerHTML = `
+    <tr>
+      <th style="min-width: 200px;">속성</th>
+      <th style="min-width: 80px;">타입</th>
+      <th style="min-width: 250px;">값</th>
+    </tr>
+  `;
+  table.appendChild(thead);
+
+  // 테이블 바디
+  const tbody = document.createElement("tbody");
+
+  Object.keys(obj).forEach((itemKey) => {
+    const item = obj[itemKey];
+    const row = createObjectTableRow(itemKey, item, `${path}.${itemKey}`);
+    tbody.appendChild(row);
+  });
+
+  table.appendChild(tbody);
 
   fieldGroup.appendChild(label);
-  fieldGroup.appendChild(nestedContainer);
+  fieldGroup.appendChild(table);
 
   return fieldGroup;
+}
+
+// 객체 테이블 행 생성
+function createObjectTableRow(key, value, itemPath) {
+  const row = document.createElement("tr");
+  row.className = "object-row";
+
+  // 속성명
+  const nameCell = document.createElement("td");
+  nameCell.textContent = formatFieldLabel(key);
+  nameCell.style.fontWeight = "500";
+
+  // 타입
+  const typeCell = document.createElement("td");
+  const valueType = Array.isArray(value) ? "array" : typeof value;
+  typeCell.innerHTML = `<span class="type-badge type-${valueType}">${valueType}</span>`;
+
+  // 값
+  const valueCell = document.createElement("td");
+
+  if (typeof value === "boolean") {
+    // Boolean
+    const container = document.createElement("div");
+    container.style.display = "flex";
+    container.style.alignItems = "center";
+    container.style.gap = "0.5rem";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "object-checkbox";
+    checkbox.checked = value;
+    checkbox.addEventListener("change", () => {
+      updateConfigValue(itemPath, checkbox.checked);
+    });
+
+    const label = document.createElement("span");
+    label.textContent = value ? "true" : "false";
+    label.style.fontSize = "0.85rem";
+    label.style.color = value ? "#28a745" : "#6c757d";
+
+    checkbox.addEventListener("change", () => {
+      label.textContent = checkbox.checked ? "true" : "false";
+      label.style.color = checkbox.checked ? "#28a745" : "#6c757d";
+    });
+
+    container.appendChild(checkbox);
+    container.appendChild(label);
+    valueCell.appendChild(container);
+  } else if (typeof value === "number") {
+    // Number
+    const input = document.createElement("input");
+    input.type = "number";
+    input.className = "object-input";
+    input.value = value;
+    input.addEventListener("change", () => {
+      updateConfigValue(itemPath, parseInt(input.value) || 0);
+    });
+    valueCell.appendChild(input);
+  } else if (typeof value === "string") {
+    // String
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "object-input";
+    input.value = value;
+
+    // URL인 경우 스타일 적용
+    if (value.includes("http") || key.toLowerCase().includes("url")) {
+      input.classList.add("url-field");
+    }
+
+    input.addEventListener("change", () => {
+      updateConfigValue(itemPath, input.value);
+    });
+    valueCell.appendChild(input);
+  } else if (Array.isArray(value)) {
+    // Array - 간단히 JSON으로 표시하고 편집 가능
+    const textarea = document.createElement("textarea");
+    textarea.className = "object-textarea";
+    textarea.value = JSON.stringify(value, null, 2);
+    textarea.rows = Math.min(value.length + 1, 5);
+    textarea.addEventListener("change", () => {
+      try {
+        const parsed = JSON.parse(textarea.value);
+        updateConfigValue(itemPath, parsed);
+        textarea.style.borderColor = "";
+      } catch (e) {
+        textarea.style.borderColor = "#e74c3c";
+      }
+    });
+    valueCell.appendChild(textarea);
+  } else if (typeof value === "object" && value !== null) {
+    // 중첩 객체 - 펼쳐서 표시
+    const nestedTable = createNestedObjectField("", value, itemPath);
+    nestedTable.style.margin = "0";
+    valueCell.appendChild(nestedTable);
+  } else {
+    // null, undefined 등
+    const span = document.createElement("span");
+    span.textContent = String(value);
+    span.style.color = "#999";
+    span.style.fontStyle = "italic";
+    valueCell.appendChild(span);
+  }
+
+  row.appendChild(nameCell);
+  row.appendChild(typeCell);
+  row.appendChild(valueCell);
+
+  return row;
 }
 
 // 설정 값 업데이트
@@ -563,11 +607,9 @@ function updateConfigValue(path, value) {
   const keys = path.split(".");
   let current = currentConfig;
 
-  // 중첩된 객체까지 탐색
   for (let i = 0; i < keys.length - 1; i++) {
     const key = keys[i];
     if (key.includes("[") && key.includes("]")) {
-      // 배열 인덱스 처리
       const [arrayKey, indexStr] = key.split("[");
       const index = parseInt(indexStr.replace("]", ""));
       current = current[arrayKey][index];
@@ -576,7 +618,6 @@ function updateConfigValue(path, value) {
     }
   }
 
-  // 최종 값 설정
   const finalKey = keys[keys.length - 1];
   if (finalKey.includes("[") && finalKey.includes("]")) {
     const [arrayKey, indexStr] = finalKey.split("[");
@@ -592,39 +633,34 @@ function updateConfigValue(path, value) {
 // 필드 라벨 포맷팅
 function formatFieldLabel(key) {
   return key
-    .replace(/([A-Z])/g, " $1") // camelCase를 공백으로 분리
-    .replace(/^./, (str) => str.toUpperCase()) // 첫 글자 대문자
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (str) => str.toUpperCase())
     .trim();
 }
 
-// 배열 아이템 추가
-function addArrayItem(array, path, container) {
+// 배열 아이템 추가 (테이블 형태)
+function addArrayItem(array, path, tbody) {
   const newItem = typeof array[0] === "object" ? {} : "";
   array.push(newItem);
 
-  const itemElement = createArrayItem(
+  const row = createArrayRow(
     newItem,
     `${path}[${array.length - 1}]`,
     array.length - 1
   );
-  container.appendChild(itemElement);
+  tbody.appendChild(row);
 
   updateStatus("새 항목이 추가되었습니다.");
 }
 
-// 배열 아이템 제거
-function removeArrayItem(itemPath, itemElement) {
-  if (!confirm("이 항목을 삭제하시겠습니까?")) return;
-
-  // DOM에서 제거
-  itemElement.remove();
-
-  // 배열에서도 제거 (실제로는 전체 폼을 다시 렌더링하는 것이 안전)
-  renderConfigEditor();
+// 배열 행 제거
+function removeArrayRow(itemPath, rowElement) {
+  rowElement.remove();
+  renderConfigEditor(); // 전체 다시 렌더링으로 인덱스 재정렬
   updateStatus("항목이 삭제되었습니다.");
 }
 
-// 💾 설정 저장 (새 날짜 파일로)
+// 설정 저장
 async function saveCurrentConfig() {
   if (!currentServer || !currentConfig) {
     showNotification("저장할 설정이 없습니다.", "error");
@@ -634,15 +670,13 @@ async function saveCurrentConfig() {
   try {
     updateStatus("설정을 저장하는 중...");
     const result = await invoke("save_server_config", {
-      serverFolder: currentServer.folderPath,
+      baseDirectory: workingDirectory,
       serverName: currentServer.name,
       content: JSON.stringify(currentConfig, null, 2),
     });
 
     showNotification("설정이 성공적으로 저장되었습니다!");
     updateStatus(result);
-
-    // 서버 목록 새로고침 (새 파일 반영)
     await refreshServerList();
   } catch (error) {
     console.error("저장 오류:", error);
@@ -653,15 +687,26 @@ async function saveCurrentConfig() {
 
 // 백업 생성
 async function backupCurrentConfig() {
-  if (!currentServer || !currentServer.latestFile) {
-    showNotification("백업할 파일이 없습니다.", "error");
+  if (!currentServer) {
+    showNotification("백업할 서버가 선택되지 않았습니다.", "error");
     return;
   }
 
   try {
     updateStatus("백업을 생성하는 중...");
+    const latestConfig = await invoke("get_latest_server_config", {
+      baseDirectory: workingDirectory,
+      serverName: currentServer.name,
+    });
+
+    const tempPath = `${workingDirectory}\\${currentServer.name}\\temp_for_backup.json`;
+    await invoke("write_json_file", {
+      filePath: tempPath,
+      content: latestConfig,
+    });
+
     const result = await invoke("backup_config", {
-      filePath: currentServer.latestFile,
+      filePath: tempPath,
     });
 
     showNotification("백업이 성공적으로 생성되었습니다!");
@@ -673,7 +718,7 @@ async function backupCurrentConfig() {
   }
 }
 
-// 🏗️ 새 서버 추가
+// 새 서버 추가
 function addNewServer() {
   const modal = document.getElementById("addServerModal");
   if (modal) {
@@ -724,7 +769,7 @@ async function createServerConfig() {
   }
 }
 
-// 🗑️ 서버 삭제
+// 서버 삭제
 async function deleteServer(server) {
   if (
     !confirm(
@@ -737,7 +782,8 @@ async function deleteServer(server) {
   try {
     updateStatus("서버를 삭제하는 중...");
     const result = await invoke("delete_server", {
-      serverFolder: server.folderPath,
+      baseDirectory: workingDirectory,
+      serverName: server.name,
     });
 
     await refreshServerList();
@@ -768,6 +814,136 @@ async function deleteServer(server) {
   }
 }
 
+// 템플릿에서 항목 추가 모달 열기
+function openAddFromTemplateModal() {
+  if (!templateConfig || !currentConfig) {
+    showNotification("템플릿 또는 현재 설정이 로드되지 않았습니다.", "error");
+    return;
+  }
+
+  const modal = document.getElementById("addFromTemplateModal");
+  if (modal) {
+    modal.style.display = "block";
+    renderMissingTemplateItems();
+  }
+}
+
+function closeAddFromTemplateModal() {
+  const modal = document.getElementById("addFromTemplateModal");
+  if (modal) modal.style.display = "none";
+}
+
+// 현재 설정에 없는 템플릿 항목들 찾기
+function findMissingTemplateItems() {
+  const missingItems = [];
+
+  function checkMissingRecursive(templateObj, currentObj, path = "") {
+    for (const key in templateObj) {
+      const currentPath = path ? `${path}.${key}` : key;
+
+      if (!(key in currentObj)) {
+        // 현재 설정에 없는 항목 발견
+        missingItems.push({
+          key: key,
+          path: currentPath,
+          value: templateObj[key],
+          type: typeof templateObj[key],
+        });
+      } else if (
+        typeof templateObj[key] === "object" &&
+        templateObj[key] !== null &&
+        !Array.isArray(templateObj[key]) &&
+        typeof currentObj[key] === "object" &&
+        currentObj[key] !== null
+      ) {
+        // 중첩 객체인 경우 재귀 검사
+        checkMissingRecursive(templateObj[key], currentObj[key], currentPath);
+      }
+    }
+  }
+
+  checkMissingRecursive(templateConfig, currentConfig);
+  return missingItems;
+}
+
+// 누락된 템플릿 항목들 렌더링
+function renderMissingTemplateItems() {
+  const container = document.getElementById("templateItemsList");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  const missingItems = findMissingTemplateItems();
+
+  if (missingItems.length === 0) {
+    container.innerHTML =
+      '<p style="text-align: center; color: #666; padding: 2rem;">추가할 수 있는 템플릿 항목이 없습니다.</p>';
+    return;
+  }
+
+  missingItems.forEach((item) => {
+    const template = document.getElementById("templateItemTemplate");
+    const clone = template.content.cloneNode(true);
+
+    const checkbox = clone.querySelector(".template-item-checkbox");
+    const nameSpan = clone.querySelector(".template-item-name");
+    const typeSpan = clone.querySelector(".template-item-type");
+
+    checkbox.value = item.path;
+    nameSpan.textContent = item.key;
+    typeSpan.textContent = `(${item.type})`;
+
+    container.appendChild(clone);
+  });
+}
+
+// 선택된 템플릿 항목들을 현재 설정에 추가
+function addSelectedTemplateItems() {
+  const checkboxes = document.querySelectorAll(
+    "#templateItemsList .template-item-checkbox:checked"
+  );
+
+  if (checkboxes.length === 0) {
+    showNotification("추가할 항목을 선택해주세요.", "warning");
+    return;
+  }
+
+  let addedCount = 0;
+
+  checkboxes.forEach((checkbox) => {
+    const path = checkbox.value;
+    const keys = path.split(".");
+
+    // 템플릿에서 값 가져오기
+    let templateValue = templateConfig;
+    let currentTarget = currentConfig;
+
+    // 중첩된 경로 탐색
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+      templateValue = templateValue[key];
+
+      // 현재 설정에 중간 객체가 없으면 생성
+      if (!(key in currentTarget)) {
+        currentTarget[key] = {};
+      }
+      currentTarget = currentTarget[key];
+    }
+
+    // 최종 키에 값 설정
+    const finalKey = keys[keys.length - 1];
+    templateValue = templateValue[finalKey];
+    currentTarget[finalKey] = JSON.parse(JSON.stringify(templateValue)); // 깊은 복사
+
+    addedCount++;
+  });
+
+  closeAddFromTemplateModal();
+  renderConfigEditor(); // 설정 에디터 다시 렌더링
+  showNotification(`${addedCount}개 항목이 추가되었습니다.`);
+  updateStatus(`템플릿에서 ${addedCount}개 항목을 추가했습니다.`);
+}
+
 // 템플릿 편집
 async function openTemplateEditor() {
   if (!templateConfig) {
@@ -786,16 +962,14 @@ function closeTemplateModal() {
   if (modal) modal.style.display = "none";
 }
 
-// 🚀 동적 템플릿 에디터 렌더링
+// 템플릿 에디터 렌더링
 function renderTemplateEditor() {
   if (!templateConfig) return;
 
   const templateEditor = document.getElementById("templateEditor");
   if (!templateEditor) return;
 
-  // 기존 내용 제거하고 동적으로 생성
   templateEditor.innerHTML = "";
-
   const form = createDynamicForm(templateConfig, "template");
   templateEditor.appendChild(form);
 }
@@ -825,7 +999,7 @@ function updateStatus(message) {
   const statusEl = elements.statusText();
   if (statusEl) {
     statusEl.textContent = message;
-    console.log("📋", message);
+    console.log("상태:", message);
   }
 }
 
@@ -842,9 +1016,9 @@ function showNotification(message, type = "success") {
   }
 
   if (type === "error") {
-    console.error("❌", message);
+    console.error("오류:", message);
   } else {
-    console.log("✅", message);
+    console.log("성공:", message);
   }
 }
 
@@ -872,6 +1046,9 @@ function setupEventListeners() {
   window.onclick = function (event) {
     const addModal = document.getElementById("addServerModal");
     const templateModal = document.getElementById("templateModal");
+    const addFromTemplateModal = document.getElementById(
+      "addFromTemplateModal"
+    );
 
     if (event.target === addModal) {
       closeAddServerModal();
@@ -879,22 +1056,25 @@ function setupEventListeners() {
     if (event.target === templateModal) {
       closeTemplateModal();
     }
+    if (event.target === addFromTemplateModal) {
+      closeAddFromTemplateModal();
+    }
   };
 }
 
 // 앱 시작
 document.addEventListener("DOMContentLoaded", async () => {
-  console.log("🚀 앱 시작...");
+  console.log("앱 시작...");
 
   const tauriReady = await waitForTauri();
 
   if (!tauriReady) {
-    alert("❌ Tauri API를 로드할 수 없습니다.\n데스크톱 앱에서만 작동합니다.");
+    alert("Tauri API를 로드할 수 없습니다.\n데스크톱 앱에서만 작동합니다.");
     return;
   }
 
   setupEventListeners();
   await init();
 
-  console.log("✨ 앱 로드 완료!");
+  console.log("앱 로드 완료!");
 });
