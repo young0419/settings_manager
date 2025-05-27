@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EzTalk 설정 관리자</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <div class="sidebar">
+        <h2 style="margin-bottom: 1rem; color: #333">📁 서버 목록</h2>
+
+        <div class="path-display" id="workingDirectory">
+          작업 경로: 로딩 중...
+        </div>
+
+        <button
+          class="btn btn-primary"
+          onclick="addNewServer()"
+          style="width: 100%; margin-bottom: 1rem"
+        >
+          ➕ 새 서버 추가
+        </button>
+
+        <button
+          class="btn btn-secondary"
+          onclick="refreshServerList()"
+          style="width: 100%; margin-bottom: 1rem"
+        >
+          🔄 목록 새로고침
+        </button>
+
+        <button
+          class="btn btn-primary"
+          onclick="openTemplateEditor()"
+          style="width: 100%; margin-bottom: 1rem; background: #f39c12"
+        >
+          📋 마스터 템플릿 편집
+        </button>
+
+        <!-- 서버 목록 컨테이너 -->
+        <div class="server-list">
+          <!-- 빈 상태 -->
+          <div id="emptyServerState" class="empty-state hidden">
+            <div style="text-align: center; padding: 2rem; color: #666">
+              <div style="font-size: 2rem; margin-bottom: 1rem">📄</div>
+              <p>설정 파일이 없습니다.</p>
+              <p style="font-size: 0.85rem">새 서버를 추가해보세요.</p>
+            </div>
+          </div>
+
+          <!-- 로딩 상태 -->
+          <div id="loadingState" class="loading">
+            <div class="spinner"></div>
+            서버 목록 로딩 중...
+          </div>
+
+          <!-- 서버 목록 -->
+          <div id="serverListContainer" class="hidden"></div>
+        </div>
+      </div>
+
+      <div class="main-content">
+        <div class="header">
+          <h1>⚙️ JSON 설정 관리자</h1>
+          <p>그룹웨어 메신저 설정을 쉽게 관리하세요</p>
+        </div>
+
+        <div class="content-area">
+          <div class="config-editor">
+            <div class="editor-header">
+              <div>
+                <h3 id="currentServerTitle">서버를 선택해주세요</h3>
+                <p
+                  id="currentServerPath"
+                  style="color: #666; font-size: 0.85rem"
+                ></p>
+              </div>
+              <div class="editor-actions">
+                <button
+                  class="btn btn-secondary"
+                  onclick="backupCurrentConfig()"
+                  disabled
+                  id="backupBtn"
+                >
+                  💾 백업
+                </button>
+                <button
+                  class="btn btn-primary"
+                  onclick="saveCurrentConfig()"
+                  disabled
+                  id="saveBtn"
+                >
+                  💾 저장
+                </button>
+              </div>
+            </div>
+
+            <!-- 설정 에디터 상태별 표시 -->
+            <div id="configEditor" class="editor-empty">
+              <!-- 빈 상태 메시지 -->
+              <div class="empty-message">
+                <div style="text-align: center; padding: 3rem; color: #666">
+                  <div style="font-size: 3rem; margin-bottom: 1rem">📋</div>
+                  <h3>서버를 선택해주세요</h3>
+                  <p>왼쪽 사이드바에서 편집할 서버를 선택하세요.</p>
+                </div>
+              </div>
+
+              <!-- 동적으로 생성되는 설정 폼 -->
+              <div class="config-content">
+                <!-- JavaScript에서 동적으로 생성됨 -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="status-bar">
+          <div id="statusText">준비</div>
+          <div id="lastSaved"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 서버 추가 모달 -->
+    <div id="addServerModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>🖥️ 새 서버 설정 파일 추가</h3>
+        </div>
+        <div>
+          <div class="field-group">
+            <label class="field-label">서버 이름</label>
+            <input
+              type="text"
+              id="serverName"
+              class="field-input"
+              placeholder="예: 개발서버"
+            />
+            <small style="color: #666"
+              >서버 이름은 폴더명으로 사용됩니다.</small
+            >
+          </div>
+          <div class="field-group">
+            <div class="field-checkbox-group">
+              <input
+                type="checkbox"
+                class="field-checkbox"
+                id="useTemplate"
+                checked
+              />
+              <label class="field-label">템플릿 사용</label>
+            </div>
+            <small style="color: #666"
+              >체크하면 마스터 템플릿을 기반으로 생성됩니다.</small
+            >
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeAddServerModal()">
+            취소
+          </button>
+          <button class="btn btn-primary" onclick="createServerConfig()">
+            생성
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 템플릿 편집 모달 -->
+    <div id="templateModal" class="modal">
+      <div class="modal-content" style="width: 800px; max-width: 90vw">
+        <div class="modal-header">
+          <h3>📋 마스터 템플릿 편집</h3>
+          <p style="color: #666; margin-top: 0.5rem">
+            새 서버 생성시 기본으로 사용될 설정입니다
+          </p>
+        </div>
+        <div style="max-height: 400px; overflow-y: auto">
+          <!-- 동적으로 생성되는 템플릿 에디터 -->
+          <div id="templateEditor">
+            <!-- JavaScript에서 동적으로 생성됨 -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeTemplateModal()">
+            취소
+          </button>
+          <button class="btn btn-primary" onclick="saveTemplate()">
+            📋 템플릿 저장
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="notification" id="notification"></div>
+
+    <!-- 서버 아이템 템플릿 -->
+    <template id="serverItemTemplate">
+      <div class="server-item">
+        <div class="server-info">
+          <h3 class="server-name"></h3>
+          <p class="server-filename"></p>
+        </div>
+        <div class="server-actions">
+          <button class="btn btn-danger btn-small delete-btn">🗑️</button>
+        </div>
+      </div>
+    </template>
+
+    <script src="main.js"></script>
+  </body>
+</html>
