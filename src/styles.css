@@ -1,3 +1,31 @@
+/* 템플릿 모달 전용 */
+#templateModal .modal-content {
+  width: 800px;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+#templateEditor {
+  max-height: calc(90vh - 200px);
+  overflow-y: auto;
+  padding-right: 10px;
+}
+
+#addFromTemplateModal .modal-content {
+  width: 600px;
+  max-width: 90vw;
+}
+
+#templateItemsList {
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+
+#changeLogModal .modal-content {
+  width: 700px;
+  max-width: 90vw;
+}
 * {
   margin: 0;
   padding: 0;
@@ -5,11 +33,13 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "Noto Sans KR", "Malgun Gothic", "맑은 고딕", -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
   line-height: 1.4;
-  overflow: hidden; /* 전체 페이지 스크롤 방지 */
+  overflow: hidden;
+  font-size: 14px;
 }
 
 .app-container {
@@ -18,6 +48,7 @@ body {
   overflow: hidden;
 }
 
+/* 🎯 왼쪽 사이드바 - 항상 고정 */
 .sidebar {
   width: 300px;
   background: rgba(255, 255, 255, 0.95);
@@ -25,16 +56,23 @@ body {
   border-right: 1px solid rgba(255, 255, 255, 0.2);
   padding: 1rem;
   overflow-y: auto;
-  flex-shrink: 0; /* 사이드바 크기 고정 */
+  flex-shrink: 0;
 }
 
+.sidebar h2 {
+  margin-bottom: 1rem;
+  color: #333;
+  font-size: 1.2rem;
+}
+
+/* 🎯 오른쪽 메인 콘텐츠 - 반응형 */
 .main-content {
   flex: 1;
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
   display: flex;
   flex-direction: column;
-  min-width: 0; /* flex 아이템이 축소될 수 있도록 */
+  min-width: 600px;
   overflow: hidden;
 }
 
@@ -52,14 +90,76 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  font-size: 1.5rem;
+}
+
+.header p {
+  font-size: 0.875rem;
+  color: #666;
 }
 
 .content-area {
   flex: 1;
   padding: 2rem;
   overflow-y: auto;
-  overflow-x: hidden; /* 가로 스크롤 방지 */
-  min-height: 0; /* flex 아이템이 축소될 수 있도록 */
+  overflow-x: auto;
+  min-height: 0;
+}
+
+/* 작업 경로 */
+.path-display {
+  background: rgba(102, 126, 234, 0.1);
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-family: "D2Coding", "Consolas", monospace;
+  font-size: 0.75rem;
+  margin-bottom: 1rem;
+  word-break: break-all;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  line-height: 1.4;
+}
+
+.path-label {
+  font-weight: 600;
+  color: #667eea;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.path-value {
+  color: #333;
+}
+
+/* 템플릿 편집 버튼 */
+.template-edit-btn {
+  width: 100%;
+  margin-bottom: 1.5rem;
+  background: #f39c12;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* 서버 목록 섹션 */
+.server-list-section {
+  margin-top: 1rem;
+}
+
+.server-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.server-list-header h3 {
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.server-list-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .server-list {
@@ -68,8 +168,7 @@ body {
 
 .server-item {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   padding: 0.75rem;
   margin-bottom: 0.5rem;
   background: rgba(255, 255, 255, 0.7);
@@ -89,15 +188,34 @@ body {
   background: rgba(102, 126, 234, 0.1);
 }
 
+.server-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.server-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .server-info h3 {
   color: #333;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.15rem;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .server-info p {
   color: #666;
-  font-size: 0.85rem;
+  font-size: 0.7rem;
+  margin: 0;
 }
+
+/* 삭제: 서버 파일 관련 스타일들 제거 */
 
 .server-actions {
   display: flex;
@@ -105,16 +223,17 @@ body {
 }
 
 .btn {
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 0.8rem;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   transition: all 0.2s;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  white-space: nowrap; /* 버튼 텍스트 줄바꿈 방지 */
+  white-space: nowrap;
+  font-weight: 500;
 }
 
 .btn-primary {
@@ -147,8 +266,13 @@ body {
 }
 
 .btn-small {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.7rem;
+}
+
+.btn-mini {
+  padding: 0.15rem 0.3rem;
+  font-size: 0.65rem;
 }
 
 .btn:disabled {
@@ -165,44 +289,42 @@ body {
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   width: 100%;
-  max-width: 100%;
-  overflow: hidden; /* 자식 요소가 넘치지 않도록 */
+  overflow: visible;
 }
 
 .editor-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start; /* 상단 정렬로 변경 */
+  align-items: flex-start;
   margin-bottom: 1.5rem;
   padding-bottom: 1rem;
   border-bottom: 2px solid rgba(102, 126, 234, 0.1);
-  gap: 1rem; /* 요소간 간격 추가 */
-  flex-wrap: wrap; /* 작은 화면에서 줄바꿈 허용 */
+  gap: 1rem;
 }
 
 .editor-header > div:first-child {
   flex: 1;
-  min-width: 0; /* 텍스트 오버플로우 방지 */
+  min-width: 0;
 }
 
 .editor-header h3 {
-  word-break: break-word; /* 긴 서버명 줄바꿈 */
+  word-break: break-word;
   margin-bottom: 0.5rem;
+  font-size: 1.1rem;
 }
 
 .editor-header p {
-  word-break: break-all; /* 긴 경로 줄바꿈 */
-  font-size: 0.85rem;
+  word-break: break-all;
+  font-size: 0.75rem;
   color: #666;
 }
 
 .editor-actions {
   display: flex;
   gap: 0.5rem;
-  flex-shrink: 0; /* 버튼 크기 유지 */
+  flex-shrink: 0;
 }
 
-/* 🚀 동적 설정 섹션 스타일 - 개선된 반응형 */
 .config-section {
   margin-bottom: 1.5rem;
   border: 1px solid rgba(102, 126, 234, 0.15);
@@ -210,12 +332,14 @@ body {
   overflow: hidden;
   background: rgba(255, 255, 255, 0.5);
   width: 100%;
+  max-width: 100%;
+  position: relative;
 }
 
 .section-header {
   display: flex;
   align-items: center;
-  padding: 1rem;
+  padding: 0.75rem;
   background: linear-gradient(
     135deg,
     rgba(102, 126, 234, 0.1) 0%,
@@ -224,7 +348,7 @@ body {
   cursor: pointer;
   transition: all 0.2s;
   border-bottom: 1px solid rgba(102, 126, 234, 0.1);
-  min-height: 60px; /* 최소 높이 보장 */
+  min-height: 50px;
 }
 
 .section-header:hover {
@@ -240,30 +364,41 @@ body {
   margin-right: 0.75rem;
   font-weight: bold;
   color: #667eea;
-  font-size: 1.2rem;
+  font-size: 1rem;
   transition: transform 0.2s;
-  flex-shrink: 0; /* 토글 아이콘 크기 유지 */
+  flex-shrink: 0;
 }
 
 .section-title {
   font-weight: 600;
   color: #333;
-  font-size: 1.1rem;
-  word-break: break-word; /* 긴 제목 줄바꿈 */
+  font-size: 0.95rem;
+  word-break: break-word;
+  flex: 1;
+}
+
+.section-delete-btn {
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.section-header:hover .section-delete-btn {
+  opacity: 1;
 }
 
 .section-content {
-  padding: 1.5rem;
+  padding: 1rem;
   background: rgba(255, 255, 255, 0.8);
   transition: all 0.3s ease;
-  max-height: none; /* 동적 높이 허용 */
-  overflow: visible; /* 내용이 잘리지 않도록 */
+  max-height: none;
+  overflow: visible;
   width: 100%;
 }
 
 .section-content:not(.expanded) {
   max-height: 0;
-  padding: 0 1.5rem;
+  padding: 0 1rem;
   opacity: 0;
   overflow: hidden;
 }
@@ -273,33 +408,39 @@ body {
   overflow: visible;
 }
 
-/* 🎯 필드 그룹 스타일 - 반응형 개선 */
 .field-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
   position: relative;
   width: 100%;
   max-width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.field-content {
+  flex: 1;
 }
 
 .field-label {
   display: block;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.3rem;
   font-weight: 500;
   color: #333;
-  font-size: 0.95rem;
-  word-break: break-word; /* 긴 라벨 줄바꿈 */
+  font-size: 0.85rem;
+  word-break: break-word;
 }
 
 .field-input {
   width: 100%;
   max-width: 100%;
-  padding: 0.75rem;
+  padding: 0.5rem;
   border: 2px solid rgba(102, 126, 234, 0.2);
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   transition: all 0.2s;
   background: rgba(255, 255, 255, 0.9);
-  word-break: break-all; /* URL 등 긴 텍스트 줄바꿈 */
+  word-break: break-all;
   box-sizing: border-box;
 }
 
@@ -310,17 +451,26 @@ body {
   background: rgba(255, 255, 255, 1);
 }
 
+.field-delete-btn {
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.field-group:hover .field-delete-btn {
+  opacity: 1;
+}
+
 .field-checkbox-group {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0;
-  flex-wrap: wrap; /* 작은 화면에서 줄바꿈 */
 }
 
 .field-checkbox {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   accent-color: #667eea;
   cursor: pointer;
   flex-shrink: 0;
@@ -332,38 +482,38 @@ body {
   user-select: none;
 }
 
-/* 🔄 배열 관리 스타일 - 테이블 형태 개선 */
 .array-container {
   background: rgba(102, 126, 234, 0.05);
   border-radius: 8px;
-  padding: 1rem;
+  padding: 0.75rem;
   border: 1px solid rgba(102, 126, 234, 0.2);
   margin-top: 0.5rem;
-  overflow-x: auto; /* 가로 스크롤 허용 */
+  overflow-x: auto;
   width: 100%;
   max-width: 100%;
 }
 
 .array-table {
   width: 100%;
-  min-width: 400px; /* 최소 테이블 너비 */
+  min-width: 400px;
   border-collapse: collapse;
   margin-bottom: 0.5rem;
-  table-layout: auto; /* 자동 테이블 레이아웃 */
+  table-layout: auto;
 }
 
 .array-table th {
   background: rgba(102, 126, 234, 0.1);
-  padding: 0.5rem;
+  padding: 0.4rem;
   text-align: left;
   font-weight: 500;
   color: #333;
   border-bottom: 1px solid rgba(102, 126, 234, 0.2);
-  white-space: nowrap; /* 헤더 텍스트 줄바꿈 방지 */
+  white-space: nowrap;
+  font-size: 0.8rem;
 }
 
 .array-table td {
-  padding: 0.5rem;
+  padding: 0.4rem;
   border-bottom: 1px solid rgba(102, 126, 234, 0.1);
   vertical-align: top;
   word-break: break-word;
@@ -375,11 +525,11 @@ body {
 
 .array-input {
   width: 100%;
-  min-width: 150px; /* 최소 입력 필드 너비 */
-  padding: 0.25rem 0.5rem;
+  min-width: 150px;
+  padding: 0.25rem 0.4rem;
   border: 1px solid rgba(102, 126, 234, 0.3);
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   background: rgba(255, 255, 255, 0.8);
   box-sizing: border-box;
   word-break: break-all;
@@ -392,8 +542,8 @@ body {
 }
 
 .array-delete-btn {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.7rem;
   background: #e74c3c;
   color: white;
   border: none;
@@ -408,13 +558,13 @@ body {
 }
 
 .array-add-btn {
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 0.8rem;
   background: #28a745;
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   transition: background 0.2s;
   white-space: nowrap;
 }
@@ -423,76 +573,66 @@ body {
   background: #218838;
 }
 
-/* 📦 중첩 객체 스타일 - 반응형 개선 */
-.nested-object {
-  margin-left: 0; /* 좌측 마진 제거 */
-  padding: 1rem;
-  border-left: 3px solid rgba(102, 126, 234, 0.3);
-  background: rgba(102, 126, 234, 0.02);
-  border-radius: 0 6px 6px 0;
-  width: 100%;
-  max-width: 100%;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.nested-object .field-label {
-  color: #667eea;
-  font-weight: 600;
-}
-
-/* 중첩 객체 테이블 스타일 - 반응형 개선 */
 .nested-object-table {
   width: 100%;
-  min-width: 600px; /* 최소 테이블 너비 */
+  max-width: 100%;
   border-collapse: collapse;
   margin-top: 0.5rem;
   background: rgba(255, 255, 255, 0.8);
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  table-layout: auto;
+  table-layout: fixed;
+}
+
+.nested-object-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  border-radius: 8px;
 }
 
 .nested-object-table th {
   background: rgba(102, 126, 234, 0.1);
-  padding: 0.75rem 0.5rem;
+  padding: 0.5rem;
   text-align: left;
   font-weight: 600;
   color: #333;
   border-bottom: 2px solid rgba(102, 126, 234, 0.2);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   white-space: nowrap;
   position: sticky;
-  top: 0; /* 스크롤시 헤더 고정 */
+  top: 0;
 }
 
 .nested-object-table td {
-  padding: 0.75rem 0.5rem;
+  padding: 0.5rem;
   border-bottom: 1px solid rgba(102, 126, 234, 0.1);
   vertical-align: top;
   word-wrap: break-word;
   overflow-wrap: break-word;
-  max-width: 0; /* 긴 내용 줄바꿈 강제 */
+  position: relative;
 }
 
-/* 테이블 열 너비 조정 */
 .nested-object-table th:nth-child(1),
 .nested-object-table td:nth-child(1) {
   width: 25%;
-  min-width: 150px;
 }
 
 .nested-object-table th:nth-child(2),
 .nested-object-table td:nth-child(2) {
   width: 15%;
-  min-width: 80px;
 }
 
 .nested-object-table th:nth-child(3),
 .nested-object-table td:nth-child(3) {
-  width: 60%;
-  min-width: 200px;
+  width: 50%;
+}
+
+.nested-object-table th:nth-child(4),
+.nested-object-table td:nth-child(4) {
+  width: 10%;
+  text-align: center;
 }
 
 .object-row:hover {
@@ -503,17 +643,28 @@ body {
   border-bottom: none;
 }
 
+.object-row-delete-btn {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.object-row:hover .object-row-delete-btn {
+  opacity: 1;
+}
+
 .object-input {
   width: 100%;
   max-width: 100%;
-  padding: 0.4rem;
+  padding: 0.3rem;
   border: 1px solid rgba(102, 126, 234, 0.3);
   border-radius: 4px;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   background: rgba(255, 255, 255, 0.9);
   transition: all 0.2s;
   box-sizing: border-box;
   word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .object-input:focus {
@@ -526,16 +677,15 @@ body {
 .object-textarea {
   width: 100%;
   max-width: 100%;
-  padding: 0.4rem;
+  padding: 0.3rem;
   border: 1px solid rgba(102, 126, 234, 0.3);
   border-radius: 4px;
-  font-size: 0.75rem;
-  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas,
-    "Courier New", monospace;
+  font-size: 0.7rem;
+  font-family: "D2Coding", "Consolas", monospace;
   background: rgba(255, 255, 255, 0.9);
   resize: vertical;
   min-height: 50px;
-  max-height: 200px; /* 최대 높이 제한 */
+  max-height: 200px;
   box-sizing: border-box;
   word-break: break-all;
 }
@@ -547,8 +697,8 @@ body {
 }
 
 .object-checkbox {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   accent-color: #667eea;
   cursor: pointer;
   margin-right: 0.5rem;
@@ -556,9 +706,9 @@ body {
 }
 
 .type-badge {
-  padding: 0.15rem 0.4rem;
+  padding: 0.1rem 0.3rem;
   border-radius: 8px;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 500;
   text-transform: uppercase;
   white-space: nowrap;
@@ -586,7 +736,6 @@ body {
   color: #c2185b;
 }
 
-/* 컨테이너 오버플로우 관리 */
 .config-content {
   width: 100%;
   max-width: 100%;
@@ -594,68 +743,24 @@ body {
   overflow-y: visible;
 }
 
-.config-section {
-  width: 100%;
-  max-width: 100%;
-}
-
-.section-content {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: auto;
-  padding-right: 10px;
-}
-
-/* 가로 스크롤이 필요한 영역에만 적용 */
-.array-container::-webkit-scrollbar,
-.section-content::-webkit-scrollbar,
-.config-content::-webkit-scrollbar {
-  height: 6px;
-  width: 6px;
-}
-
-.array-container::-webkit-scrollbar-track,
-.section-content::-webkit-scrollbar-track,
-.config-content::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-}
-
-.array-container::-webkit-scrollbar-thumb,
-.section-content::-webkit-scrollbar-thumb,
-.config-content::-webkit-scrollbar-thumb {
-  background: rgba(102, 126, 234, 0.3);
-  border-radius: 3px;
-}
-
-.array-container::-webkit-scrollbar-thumb:hover,
-.section-content::-webkit-scrollbar-thumb:hover,
-.config-content::-webkit-scrollbar-thumb:hover {
-  background: rgba(102, 126, 234, 0.5);
-}
-
-/* 상태바 */
 .status-bar {
-  padding: 0.75rem 2rem;
+  padding: 0.5rem 2rem;
   background: rgba(255, 255, 255, 0.95);
   border-top: 1px solid rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(10px);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   color: #666;
   flex-shrink: 0;
-  flex-wrap: wrap;
-  gap: 0.5rem;
 }
 
-/* 알림 */
 .notification {
   position: fixed;
   top: 20px;
   right: 20px;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1rem;
   background: #28a745;
   color: white;
   border-radius: 8px;
@@ -667,6 +772,7 @@ body {
   animation: slideIn 0.3s ease;
   max-width: 400px;
   word-break: break-word;
+  font-size: 0.85rem;
 }
 
 .notification.error {
@@ -688,7 +794,6 @@ body {
   }
 }
 
-/* 모달 */
 .modal {
   display: none;
   position: fixed;
@@ -718,7 +823,7 @@ body {
     rgba(255, 255, 255, 0.9) 100%
   );
   margin: 2% auto;
-  padding: 2rem;
+  padding: 1.5rem;
   border-radius: 12px;
   width: 500px;
   max-width: 90vw;
@@ -742,8 +847,8 @@ body {
 }
 
 .modal-header {
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
   border-bottom: 2px solid rgba(102, 126, 234, 0.1);
 }
 
@@ -753,22 +858,27 @@ body {
   align-items: center;
   gap: 0.5rem;
   word-break: break-word;
+  font-size: 1.1rem;
+}
+
+.modal-header p {
+  font-size: 0.75rem;
+  color: #666;
 }
 
 .modal-footer {
-  margin-top: 2rem;
+  margin-top: 1.5rem;
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
-  flex-wrap: wrap;
 }
 
-/* 로딩 */
 .loading {
   display: none;
   text-align: center;
   padding: 2rem;
   color: #666;
+  font-size: 0.85rem;
 }
 
 .spinner {
@@ -790,19 +900,6 @@ body {
   }
 }
 
-/* 경로 표시 */
-.path-display {
-  background: rgba(102, 126, 234, 0.1);
-  padding: 0.5rem;
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 0.85rem;
-  margin-bottom: 1rem;
-  word-break: break-all;
-  border: 1px solid rgba(102, 126, 234, 0.2);
-}
-
-/* 상태 관리 클래스들 */
 .hidden {
   display: none !important;
 }
@@ -813,7 +910,10 @@ body {
   color: #666;
 }
 
-/* 에디터 상태별 표시 */
+.empty-state p {
+  font-size: 0.85rem;
+}
+
 .editor-empty .config-content {
   display: none;
 }
@@ -826,24 +926,13 @@ body {
   display: block;
 }
 
-/* 🎨 특별한 필드 타입들 */
 .field-url,
 .url-field {
-  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas,
-    "Courier New", monospace;
-  font-size: 0.85rem;
+  font-family: "D2Coding", "Consolas", monospace;
+  font-size: 0.75rem;
   color: #0066cc;
 }
 
-.field-number {
-  text-align: right;
-}
-
-.field-boolean {
-  transform: scale(1.2);
-}
-
-/* 템플릿 항목 선택 스타일 */
 .template-item {
   padding: 0.5rem;
   border: 1px solid rgba(102, 126, 234, 0.2);
@@ -863,6 +952,7 @@ body {
   align-items: center;
   cursor: pointer;
   margin: 0;
+  font-size: 0.8rem;
 }
 
 .template-item-checkbox {
@@ -880,12 +970,11 @@ body {
 
 .template-item-type {
   color: #666;
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   margin-left: 0.5rem;
   flex-shrink: 0;
 }
 
-/* 스크롤바 스타일 */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -905,7 +994,6 @@ body {
   background: rgba(102, 126, 234, 0.5);
 }
 
-/* 모달 내 스크롤 영역 전용 스타일 */
 .modal-content ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -920,420 +1008,26 @@ body {
   background: rgba(102, 126, 234, 0.6);
 }
 
-/* 📱 반응형 디자인 - 모바일/태블릿 대응 */
-@media (max-width: 1200px) {
-  .app-container {
-    flex-direction: column;
-  }
-
-  .sidebar {
-    width: 100%;
-    height: 250px;
-    max-height: 30vh;
-    order: 2; /* 메인 콘텐츠 아래로 이동 */
-  }
-
-  .main-content {
-    order: 1;
-    flex: 1;
-  }
-
-  .content-area {
-    padding: 1rem;
-  }
-
-  .nested-object-table {
-    min-width: 500px; /* 작은 화면에서 테이블 최소 너비 줄임 */
-  }
-
-  .nested-object-table th:nth-child(1),
-  .nested-object-table td:nth-child(1) {
-    min-width: 120px;
-  }
-
-  .nested-object-table th:nth-child(3),
-  .nested-object-table td:nth-child(3) {
-    min-width: 150px;
-  }
+/* 🎯 템플릿 모달 전용 */
+#templateModal .modal-content {
+  width: 800px;
+  max-width: 90vw;
+  max-height: 90vh;
 }
 
-@media (max-width: 768px) {
-  .editor-header {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: flex-start;
-  }
-
-  .editor-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .modal-content {
-    margin: 5% 5%;
-    width: auto;
-    padding: 1.5rem;
-    max-height: 90vh;
-  }
-
-  .modal-footer {
-    justify-content: center;
-  }
-
-  .array-table {
-    min-width: 300px; /* 모바일에서 배열 테이블 최소 너비 */
-  }
-
-  .nested-object-table {
-    min-width: 400px;
-    font-size: 0.8rem;
-  }
-
-  .nested-object-table th,
-  .nested-object-table td {
-    padding: 0.5rem 0.25rem;
-  }
-
-  .type-badge {
-    font-size: 0.65rem;
-    padding: 0.1rem 0.3rem;
-  }
-
-  .status-bar {
-    padding: 0.5rem 1rem;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.25rem;
-  }
+#templateEditor {
+  max-height: calc(90vh - 200px);
+  overflow-y: auto;
+  padding-right: 10px;
 }
 
-@media (max-width: 480px) {
-  .sidebar {
-    padding: 0.75rem;
-  }
-
-  .content-area {
-    padding: 0.75rem;
-  }
-
-  .config-editor {
-    padding: 1rem;
-  }
-
-  .section-header {
-    padding: 0.75rem;
-  }
-
-  .section-content {
-    padding: 1rem;
-  }
-
-  .field-group {
-    margin-bottom: 1rem;
-  }
-
-  .btn {
-    padding: 0.4rem 0.8rem;
-    font-size: 0.8rem;
-  }
-
-  .array-table,
-  .nested-object-table {
-    font-size: 0.75rem;
-  }
-
-  .notification {
-    left: 10px;
-    right: 10px;
-    max-width: none;
-  }
+#addFromTemplateModal .modal-content {
+  width: 600px;
+  max-width: 90vw;
 }
 
-/* 🔍 포커스 및 접근성 개선 */
-.btn:focus,
-.field-input:focus,
-.field-checkbox:focus,
-.object-input:focus,
-.object-checkbox:focus,
-.array-input:focus {
-  outline: 2px solid #667eea;
-  outline-offset: 2px;
-}
-
-.section-header:focus {
-  outline: 2px solid #667eea;
-  outline-offset: -2px;
-}
-
-/* 키보드 네비게이션 지원 */
-.section-header[tabindex]:focus {
-  background: linear-gradient(
-    135deg,
-    rgba(102, 126, 234, 0.2) 0%,
-    rgba(118, 75, 162, 0.2) 100%
-  );
-}
-
-/* 🎯 동적 컨텐츠 길이에 따른 조정 */
-.config-section.large-content .section-content {
-  max-height: 800px; /* 큰 컨텐츠용 최대 높이 */
-}
-
-.config-section.small-content .section-content {
-  max-height: 300px; /* 작은 컨텐츠용 최대 높이 */
-}
-
-/* 긴 URL이나 경로를 위한 특별 처리 */
-.long-text-field {
-  word-break: break-all;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-/* 배열 항목이 많을 때를 위한 스타일 */
-.array-container.large-array {
+#templateItemsList {
   max-height: 400px;
   overflow-y: auto;
+  padding-right: 10px;
 }
-
-.array-container.large-array .array-table {
-  position: relative;
-}
-
-.array-container.large-array .array-table thead th {
-  position: sticky;
-  top: 0;
-  background: rgba(102, 126, 234, 0.15);
-  z-index: 10;
-}
-
-/* 중첩 객체가 깊을 때를 위한 스타일 */
-.nested-object.deep-level {
-  margin-left: 0.5rem;
-  border-left-width: 2px;
-}
-
-.nested-object.deep-level .nested-object {
-  margin-left: 0;
-  border-left-color: rgba(102, 126, 234, 0.2);
-}
-
-/* 성능 최적화를 위한 will-change 속성 */
-.section-header:hover,
-.server-item:hover,
-.btn:hover {
-  will-change: transform;
-}
-
-/* 애니메이션 성능 최적화 */
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* 다크모드 지원 (시스템 설정 감지) */
-@media (prefers-color-scheme: dark) {
-  body {
-    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-  }
-
-  .sidebar,
-  .main-content,
-  .config-editor {
-    background: rgba(52, 73, 94, 0.95);
-    color: #ecf0f1;
-  }
-
-  .header {
-    background: rgba(52, 73, 94, 0.95);
-    color: #ecf0f1;
-  }
-
-  .field-input,
-  .object-input,
-  .array-input {
-    background: rgba(44, 62, 80, 0.8);
-    color: #ecf0f1;
-    border-color: rgba(52, 152, 219, 0.3);
-  }
-
-  .section-header {
-    background: linear-gradient(
-      135deg,
-      rgba(52, 152, 219, 0.15) 0%,
-      rgba(155, 89, 182, 0.15) 100%
-    );
-    color: #ecf0f1;
-  }
-
-  .field-label,
-  .section-title {
-    color: #ecf0f1;
-  }
-
-  .server-item {
-    background: rgba(52, 73, 94, 0.7);
-    color: #ecf0f1;
-  }
-
-  .notification {
-    color: #ecf0f1;
-  }
-}
-
-/* 인쇄 스타일 */
-@media print {
-  .sidebar,
-  .editor-actions,
-  .modal,
-  .notification,
-  .status-bar {
-    display: none !important;
-  }
-
-  .main-content {
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  .config-editor {
-    box-shadow: none !important;
-    border: 1px solid #ccc !important;
-  }
-
-  .section-content {
-    max-height: none !important;
-    overflow: visible !important;
-  }
-
-  .section-content:not(.expanded) {
-    max-height: none !important;
-    opacity: 1 !important;
-  }
-}
-
-/* 고해상도 디스플레이 대응 */
-@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
-  .spinner {
-    border-width: 2px;
-  }
-
-  .type-badge {
-    border: 0.5px solid rgba(0, 0, 0, 0.1);
-  }
-}
-
-/* 컨테이너 쿼리 지원 (최신 브라우저) */
-@supports (container-type: inline-size) {
-  .config-section {
-    container-type: inline-size;
-  }
-
-  @container (max-width: 600px) {
-    .nested-object-table {
-      min-width: 300px;
-      font-size: 0.8rem;
-    }
-
-    .array-table {
-      min-width: 250px;
-    }
-  }
-}
-
-/* 터치 디바이스 지원 */
-@media (hover: none) and (pointer: coarse) {
-  .btn,
-  .section-header,
-  .server-item {
-    min-height: 44px; /* 터치 친화적 최소 높이 */
-  }
-
-  .field-checkbox,
-  .object-checkbox {
-    min-width: 24px;
-    min-height: 24px;
-  }
-
-  .array-delete-btn {
-    min-width: 44px;
-    min-height: 32px;
-  }
-}
-
-/* 로딩 상태 개선 */
-.loading-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  backdrop-filter: blur(2px);
-}
-
-.config-editor.loading {
-  position: relative;
-}
-
-/* 에러 상태 스타일 */
-.field-error {
-  border-color: #e74c3c !important;
-  box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.2) !important;
-}
-
-.error-message {
-  color: #e74c3c;
-  font-size: 0.8rem;
-  margin-top: 0.25rem;
-  display: block;
-}
-
-/* 성공 상태 스타일 */
-.field-success {
-  border-color: #28a745 !important;
-  box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.2) !important;
-}
-
-/* 툴팁 스타일 */
-.tooltip {
-  position: relative;
-  display: inline-block;
-}
-
-.tooltip:hover::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: 125%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 0.5rem;
-  border-radius: 4px;
-  white-space: nowrap;
-  font-size: 0.8rem;
-  z-index: 1000;
-  pointer-events: none;
-}
-
-.tooltip:hover::before {
-  content: '';
-  position: absolute;
-  bottom: 115%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 5px solid transparent;
-  border-top-color: rgba(0, 0, 0, 0.8);
-  z-index: 1000;
-}
-
-/*

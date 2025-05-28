@@ -28,9 +28,11 @@ function waitForTauri() {
 // 전역 변수
 let currentServer = null;
 let currentConfig = null;
+let originalConfig = null; // 원본 설정 저장용
 let templateConfig = null;
 let serverList = [];
 let workingDirectory = "";
+let changeLog = []; // 변경 로그 저장용
 
 // DOM 요소들
 const elements = {
@@ -41,7 +43,7 @@ const elements = {
   configEditor: () => document.getElementById("configEditor"),
   currentServerTitle: () => document.getElementById("currentServerTitle"),
   currentServerPath: () => document.getElementById("currentServerPath"),
-  backupBtn: () => document.getElementById("backupBtn"),
+  changeLogBtn: () => document.getElementById("changeLogBtn"),
   saveBtn: () => document.getElementById("saveBtn"),
   statusText: () => document.getElementById("statusText"),
   notification: () => document.getElementById("notification"),
@@ -52,7 +54,10 @@ async function init() {
   try {
     workingDirectory = await invoke("get_default_config_path");
     const pathEl = elements.workingDirectory();
-    if (pathEl) pathEl.textContent = `작업 경로: ${workingDirectory}`;
+    if (pathEl) {
+      const pathValue = pathEl.querySelector(".path-value");
+      if (pathValue) pathValue.textContent = workingDirectory;
+    }
 
     await loadTemplate();
     await refreshServerList();
@@ -111,6 +116,8 @@ async function refreshServerList() {
   showLoadingState(false);
 }
 
+// 삭제: getServerFiles 함수 제거 (더 이상 사용하지 않음)
+
 // 로딩 상태 표시/숨김
 function showLoadingState(show) {
   const loadingEl = elements.loadingState();
@@ -149,9 +156,22 @@ function createServerItem(server) {
   // 데이터 바인딩
   clone.querySelector(".server-name").textContent = server.name;
 
+  // 설정 파일 개수 표시
+  const detailsEl = clone.querySelector(".server-details");
+  if (server.fileCount !== undefined) {
+    detailsEl.textContent = `설정 파일 ${server.fileCount}개`;
+  } else {
+    detailsEl.textContent = "설정 확인 중...";
+  }
+
   // 이벤트 바인딩
   const itemEl = clone.querySelector(".server-item");
-  itemEl.onclick = () => selectServer(server);
+  itemEl.onclick = (e) => {
+    // 삭제 버튼 클릭 시에는 서버 선택하지 않음
+    if (!e.target.classList.contains("delete-btn")) {
+      selectServer(server);
+    }
+  };
 
   const deleteBtn = clone.querySelector(".delete-btn");
   deleteBtn.onclick = (e) => {
@@ -171,13 +191,35 @@ function createServerItem(server) {
 async function selectServer(server) {
   try {
     updateStatus("설정 파일을 읽는 중...");
+
+    // 최신 설정 파일 정보 가져오기
+    let latestFile = "";
+    let fileCount = 0;
+
+    try {
+      const files = await invoke("list_server_files", {
+        baseDirectory: workingDirectory,
+        serverName: server.name,
+      });
+
+      fileCount = files.length;
+      if (files.length > 0) {
+        latestFile = files[0]; // 가장 최신 파일 (이미 정렬됨)
+      }
+    } catch (e) {
+      console.warn("파일 목록 가져오기 실패:", e);
+    }
+
     const content = await invoke("get_latest_server_config", {
       baseDirectory: workingDirectory,
       serverName: server.name,
     });
 
     currentServer = server;
+    currentServer.latestFile = latestFile;
+    currentServer.fileCount = fileCount;
     currentConfig = JSON.parse(content);
+    originalConfig = JSON.parse(content); // 원본 저장
 
     updateServerInfo(server);
     renderConfigEditor();
@@ -194,12 +236,24 @@ async function selectServer(server) {
 function updateServerInfo(server) {
   const titleEl = elements.currentServerTitle();
   const pathEl = elements.currentServerPath();
-  const backupBtn = elements.backupBtn();
+  const changeLogBtn = elements.changeLogBtn();
   const saveBtn = elements.saveBtn();
 
-  if (titleEl) titleEl.textContent = server.name;
-  if (pathEl) pathEl.textContent = `${workingDirectory}\\${server.name}`;
-  if (backupBtn) backupBtn.disabled = false;
+  if (titleEl) {
+    titleEl.textContent = server.name;
+    if (server.latestFile) {
+      titleEl.textContent += ` - ${server.latestFile}`;
+    }
+  }
+
+  if (pathEl) {
+    pathEl.textContent = `${workingDirectory}\\${server.name}`;
+    if (server.fileCount !== undefined) {
+      pathEl.textContent += ` (총 ${server.fileCount}개 파일)`;
+    }
+  }
+
+  if (changeLogBtn) changeLogBtn.disabled = false;
   if (saveBtn) saveBtn.disabled = false;
 }
 
@@ -267,12 +321,20 @@ function groupConfigKeys(obj) {
     }
   }
 
-  // 기본 설정이 있으면 추가
+  // 기본 설정을 맨 앞에 추가
+  const orderedCategories = {};
+
+  // 기본 설정이 있으면 맨 먼저 추가
   if (rootFields.length > 0) {
-    categories["기본 설정"] = rootFields;
+    orderedCategories["기본 설정"] = rootFields;
   }
 
-  return categories;
+  // 나머지 카테고리들 추가
+  Object.entries(categories).forEach(([key, value]) => {
+    orderedCategories[key] = value;
+  });
+
+  return orderedCategories;
 }
 
 // 카테고리 이름 생성 (동적)
@@ -292,6 +354,14 @@ function createConfigSection(categoryName, obj, keys, basePath) {
   clone.querySelector(".section-title").textContent = categoryName;
   const content = clone.querySelector(".section-content");
 
+  // 섹션 삭제 버튼 이벤트
+  const deleteBtn = clone.querySelector(".section-delete-btn");
+  deleteBtn.onclick = () => {
+    if (confirm(`'${categoryName}' 섹션을 삭제하시겠습니까?`)) {
+      deleteSection(categoryName, keys, basePath);
+    }
+  };
+
   keys.forEach((key) => {
     const field = createDynamicField(
       key,
@@ -302,13 +372,27 @@ function createConfigSection(categoryName, obj, keys, basePath) {
   });
 
   const header = clone.querySelector(".section-header");
-  header.addEventListener("click", () => {
-    const isExpanded = content.classList.contains("expanded");
-    content.classList.toggle("expanded");
-    header.querySelector(".toggle").textContent = isExpanded ? "▶" : "▼";
+  header.addEventListener("click", (e) => {
+    if (!e.target.classList.contains("section-delete-btn")) {
+      const isExpanded = content.classList.contains("expanded");
+      content.classList.toggle("expanded");
+      header.querySelector(".toggle").textContent = isExpanded ? "▶" : "▼";
+    }
   });
 
   return clone;
+}
+
+// 섹션 삭제
+function deleteSection(categoryName, keys, basePath) {
+  if (!currentConfig) return;
+
+  keys.forEach((key) => {
+    delete currentConfig[key];
+  });
+
+  renderConfigEditor();
+  updateStatus(`'${categoryName}' 섹션이 삭제되었습니다.`);
 }
 
 // 동적 필드 생성
@@ -341,47 +425,13 @@ function createCheckboxField(key, value, path) {
     updateConfigValue(path, checkbox.checked);
   });
 
-  return clone;
-}
-
-// 숫자 필드 생성
-function createNumberField(key, value, path) {
-  const template = document.getElementById("numberFieldTemplate");
-  const clone = template.content.cloneNode(true);
-
-  clone.querySelector(".field-label").textContent = formatFieldLabel(key);
-  const input = clone.querySelector(".field-input");
-  input.value = value;
-
-  input.addEventListener("change", () => {
-    updateConfigValue(path, parseInt(input.value) || 0);
-  });
-
-  return clone;
-}
-
-// 텍스트 필드 생성 (템플릿 사용)
-function createTextField(key, value, path) {
-  const template = document.getElementById("textFieldTemplate");
-  const clone = template.content.cloneNode(true);
-
-  // 데이터 바인딩
-  clone.querySelector(".field-label").textContent = formatFieldLabel(key);
-  const input = clone.querySelector(".field-input");
-  input.value = value;
-
-  // URL인 경우 특별 스타일 적용
-  if (
-    typeof value === "string" &&
-    (value.includes("http") || key.toLowerCase().includes("url"))
-  ) {
-    input.classList.add("url-field");
-  }
-
-  // 이벤트 바인딩
-  input.addEventListener("change", () => {
-    updateConfigValue(path, input.value);
-  });
+  // 삭제 버튼 이벤트
+  const deleteBtn = clone.querySelector(".field-delete-btn");
+  deleteBtn.onclick = () => {
+    if (confirm(`'${formatFieldLabel(key)}' 필드를 삭제하시겠습니까?`)) {
+      deleteField(path);
+    }
+  };
 
   return clone;
 }
@@ -405,6 +455,14 @@ function createArrayField(key, array, path) {
   addButton.addEventListener("click", () => {
     addArrayItem(array, path, tbody);
   });
+
+  // 삭제 버튼 이벤트
+  const deleteBtn = clone.querySelector(".field-delete-btn");
+  deleteBtn.onclick = () => {
+    if (confirm(`'${formatFieldLabel(key)}' 배열을 삭제하시겠습니까?`)) {
+      deleteField(path);
+    }
+  };
 
   return clone;
 }
@@ -452,13 +510,21 @@ function createNestedObjectField(key, obj, path) {
   const fieldGroup = document.createElement("div");
   fieldGroup.className = "field-group";
 
+  const fieldContent = document.createElement("div");
+  fieldContent.className = "field-content";
+  fieldContent.style.width = "100%";
+
   const label = document.createElement("label");
   label.className = "field-label";
   label.textContent = formatFieldLabel(key);
-  label.style.fontSize = "1.1rem";
+  label.style.fontSize = "0.9rem";
   label.style.fontWeight = "600";
   label.style.color = "#667eea";
-  label.style.marginBottom = "1rem";
+  label.style.marginBottom = "0.5rem";
+
+  // 테이블 래퍼 추가
+  const tableWrapper = document.createElement("div");
+  tableWrapper.className = "nested-object-table-wrapper";
 
   const table = document.createElement("table");
   table.className = "nested-object-table";
@@ -467,9 +533,10 @@ function createNestedObjectField(key, obj, path) {
   const thead = document.createElement("thead");
   thead.innerHTML = `
     <tr>
-      <th style="min-width: 200px;">속성</th>
-      <th style="min-width: 80px;">타입</th>
-      <th style="min-width: 250px;">값</th>
+      <th style="width: 25%;">속성</th>
+      <th style="width: 15%;">타입</th>
+      <th style="width: 50%;">값</th>
+      <th style="width: 10%;">작업</th>
     </tr>
   `;
   table.appendChild(thead);
@@ -484,9 +551,22 @@ function createNestedObjectField(key, obj, path) {
   });
 
   table.appendChild(tbody);
+  tableWrapper.appendChild(table);
 
-  fieldGroup.appendChild(label);
-  fieldGroup.appendChild(table);
+  fieldContent.appendChild(label);
+  fieldContent.appendChild(tableWrapper);
+  fieldGroup.appendChild(fieldContent);
+
+  // 필드 삭제 버튼
+  const deleteBtn = document.createElement("button");
+  deleteBtn.className = "btn btn-danger btn-mini field-delete-btn";
+  deleteBtn.textContent = "삭제";
+  deleteBtn.onclick = () => {
+    if (confirm(`'${formatFieldLabel(key)}' 객체를 삭제하시겠습니까?`)) {
+      deleteField(path);
+    }
+  };
+  fieldGroup.appendChild(deleteBtn);
 
   return fieldGroup;
 }
@@ -526,7 +606,7 @@ function createObjectTableRow(key, value, itemPath) {
 
     const label = document.createElement("span");
     label.textContent = value ? "true" : "false";
-    label.style.fontSize = "0.85rem";
+    label.style.fontSize = "0.75rem";
     label.style.color = value ? "#28a745" : "#6c757d";
 
     checkbox.addEventListener("change", () => {
@@ -554,6 +634,11 @@ function createObjectTableRow(key, value, itemPath) {
     input.className = "object-input";
     input.value = value;
 
+    // 긴 텍스트일 경우 title 속성 추가 (툴팁)
+    if (value.length > 50) {
+      input.title = value;
+    }
+
     // URL인 경우 스타일 적용
     if (value.includes("http") || key.toLowerCase().includes("url")) {
       input.classList.add("url-field");
@@ -562,6 +647,12 @@ function createObjectTableRow(key, value, itemPath) {
     input.addEventListener("change", () => {
       updateConfigValue(itemPath, input.value);
     });
+
+    // 포커스 시 전체 내용 선택
+    input.addEventListener("focus", () => {
+      input.select();
+    });
+
     valueCell.appendChild(input);
   } else if (Array.isArray(value)) {
     // Array - 간단히 JSON으로 표시하고 편집 가능
@@ -593,11 +684,57 @@ function createObjectTableRow(key, value, itemPath) {
     valueCell.appendChild(span);
   }
 
+  // 작업 셀 (삭제 버튼)
+  const actionCell = document.createElement("td");
+  const deleteBtn = document.createElement("button");
+  deleteBtn.className = "btn btn-danger btn-mini object-row-delete-btn";
+  deleteBtn.textContent = "삭제";
+  deleteBtn.onclick = () => {
+    if (confirm(`'${formatFieldLabel(key)}' 속성을 삭제하시겠습니까?`)) {
+      deleteField(itemPath);
+    }
+  };
+  actionCell.appendChild(deleteBtn);
+
   row.appendChild(nameCell);
   row.appendChild(typeCell);
   row.appendChild(valueCell);
+  row.appendChild(actionCell);
 
   return row;
+}
+
+// 필드 삭제
+function deleteField(path) {
+  if (!currentConfig) return;
+
+  const keys = path.split(".");
+  let current = currentConfig;
+  const parentKeys = keys.slice(0, -1);
+  const lastKey = keys[keys.length - 1];
+
+  // 부모 객체 찾기
+  for (const key of parentKeys) {
+    if (key.includes("[") && key.includes("]")) {
+      const [arrayKey, indexStr] = key.split("[");
+      const index = parseInt(indexStr.replace("]", ""));
+      current = current[arrayKey][index];
+    } else {
+      current = current[key];
+    }
+  }
+
+  // 삭제
+  if (lastKey.includes("[") && lastKey.includes("]")) {
+    const [arrayKey, indexStr] = lastKey.split("[");
+    const index = parseInt(indexStr.replace("]", ""));
+    current[arrayKey].splice(index, 1);
+  } else {
+    delete current[lastKey];
+  }
+
+  renderConfigEditor();
+  updateStatus(`${path} 필드가 삭제되었습니다.`);
 }
 
 // 설정 값 업데이트
@@ -669,15 +806,38 @@ async function saveCurrentConfig() {
 
   try {
     updateStatus("설정을 저장하는 중...");
+
+    // 변경사항 감지
+    const changes = detectChanges(originalConfig, currentConfig);
+
     const result = await invoke("save_server_config", {
       baseDirectory: workingDirectory,
       serverName: currentServer.name,
       content: JSON.stringify(currentConfig, null, 2),
     });
 
+    // 변경 로그 추가
+    if (changes.length > 0) {
+      const logEntry = {
+        timestamp: new Date().toLocaleString("ko-KR"),
+        server: currentServer.name,
+        file: result.match(/([^\\]+\.json)$/)?.[1] || "unknown",
+        changes: changes,
+      };
+      changeLog.unshift(logEntry); // 최신 로그를 앞에 추가
+
+      // 로그를 파일로 저장
+      await saveChangeLog(logEntry);
+    }
+
     showNotification("설정이 성공적으로 저장되었습니다!");
     updateStatus(result);
+
+    // 서버 목록 새로고침 후 현재 서버 다시 선택
     await refreshServerList();
+
+    // 저장 후 최신 파일 다시 로드
+    await selectServer(currentServer);
   } catch (error) {
     console.error("저장 오류:", error);
     showNotification("저장 중 오류가 발생했습니다: " + error, "error");
@@ -685,36 +845,171 @@ async function saveCurrentConfig() {
   }
 }
 
-// 백업 생성
-async function backupCurrentConfig() {
-  if (!currentServer) {
-    showNotification("백업할 서버가 선택되지 않았습니다.", "error");
+// 변경사항 감지
+function detectChanges(original, current, path = "") {
+  const changes = [];
+
+  // 현재 객체의 모든 키 확인
+  for (const key in current) {
+    const currentPath = path ? `${path}.${key}` : key;
+
+    if (!(key in original)) {
+      // 새로 추가된 필드
+      changes.push({
+        type: "added",
+        path: currentPath,
+        newValue: current[key],
+      });
+    } else if (
+      typeof current[key] === "object" &&
+      current[key] !== null &&
+      !Array.isArray(current[key])
+    ) {
+      // 중첩 객체인 경우 재귀 호출
+      if (typeof original[key] === "object" && original[key] !== null) {
+        changes.push(
+          ...detectChanges(original[key], current[key], currentPath)
+        );
+      } else {
+        changes.push({
+          type: "modified",
+          path: currentPath,
+          oldValue: original[key],
+          newValue: current[key],
+        });
+      }
+    } else if (JSON.stringify(original[key]) !== JSON.stringify(current[key])) {
+      // 값이 변경된 경우
+      changes.push({
+        type: "modified",
+        path: currentPath,
+        oldValue: original[key],
+        newValue: current[key],
+      });
+    }
+  }
+
+  // 삭제된 필드 확인
+  for (const key in original) {
+    if (!(key in current)) {
+      const currentPath = path ? `${path}.${key}` : key;
+      changes.push({
+        type: "deleted",
+        path: currentPath,
+        oldValue: original[key],
+      });
+    }
+  }
+
+  return changes;
+}
+
+// 변경 로그 저장
+async function saveChangeLog(logEntry) {
+  try {
+    const logFileName = `changelog_${currentServer.name}.log`; // 확장자만 바꿈
+    const logPath = `${workingDirectory}\\${currentServer.name}\\${logFileName}`;
+
+    // 로그 항목을 사람이 읽기 좋은 문자열로 변환
+    const timestamp = logEntry.timestamp;
+    const changesText = logEntry.changes
+      .map((change) => {
+        switch (change.type) {
+          case "added":
+            return `추가됨: ${change.path} = ${JSON.stringify(
+              change.newValue
+            )}`;
+          case "modified":
+            return `변경됨: ${change.path} ${JSON.stringify(
+              change.oldValue
+            )} → ${JSON.stringify(change.newValue)}`;
+          case "deleted":
+            return `삭제됨: ${change.path} (기존값: ${JSON.stringify(
+              change.oldValue
+            )})`;
+          default:
+            return "";
+        }
+      })
+      .join("; ");
+
+    const fullLogLine = `[${timestamp}] 서버: ${logEntry.server}, 파일: ${logEntry.file}, 변경사항: ${changesText}`;
+
+    // Rust 쪽에 한 줄 추가 요청
+    await invoke("append_log_file", {
+      filePath: logPath,
+      logEntry: fullLogLine,
+    });
+  } catch (error) {
+    console.error("로그 저장 실패:", error);
+  }
+}
+
+// 변경 로그 보기
+function viewChangeLog() {
+  const modal = document.getElementById("changeLogModal");
+  if (modal) {
+    modal.style.display = "block";
+    loadAndRenderChangeLog();
+  }
+}
+
+function closeChangeLogModal() {
+  const modal = document.getElementById("changeLogModal");
+  if (modal) modal.style.display = "none";
+}
+
+async function loadAndRenderChangeLog() {
+  const logText = await loadChangeLog();
+  renderChangeLog(logText);
+}
+
+// 로그 파일 읽어오는 함수 (텍스트 전체 반환)
+async function loadChangeLog() {
+  try {
+    const logFileName = `changelog_${currentServer.name}.log`;
+    const logPath = `${workingDirectory}\\${currentServer.name}\\${logFileName}`;
+
+    const content = await invoke("read_log_file", { filePath: logPath });
+    return content;
+  } catch (error) {
+    console.error("로그 파일 읽기 실패:", error);
+    return null;
+  }
+}
+
+// 화면에 렌더링하는 함수 (텍스트 줄 단위로 뿌림)
+function renderChangeLog(logText) {
+  const container = document.getElementById("changeLogContent");
+  if (!container) return;
+
+  if (!logText || logText.trim() === "") {
+    container.innerHTML =
+      '<p style="text-align: center; color: #666; padding: 2rem;">변경 로그가 없습니다.</p>';
     return;
   }
 
-  try {
-    updateStatus("백업을 생성하는 중...");
-    const latestConfig = await invoke("get_latest_server_config", {
-      baseDirectory: workingDirectory,
-      serverName: currentServer.name,
-    });
+  const lines = logText.split(/\r?\n/);
+  const lastLines = lines.slice(-10);
 
-    const tempPath = `${workingDirectory}\\${currentServer.name}\\temp_for_backup.json`;
-    await invoke("write_json_file", {
-      filePath: tempPath,
-      content: latestConfig,
-    });
+  container.innerHTML = "";
 
-    const result = await invoke("backup_config", {
-      filePath: tempPath,
-    });
+  lastLines.forEach((line) => {
+    const lineDiv = document.createElement("div");
+    lineDiv.className = "log-line";
+    lineDiv.textContent = line;
+    container.appendChild(lineDiv);
+  });
+}
 
-    showNotification("백업이 성공적으로 생성되었습니다!");
-    updateStatus(result);
-  } catch (error) {
-    console.error("백업 오류:", error);
-    showNotification("백업 생성 중 오류가 발생했습니다: " + error, "error");
-    updateStatus("백업 실패");
+// 값 포맷팅
+function formatValue(value) {
+  if (typeof value === "string") {
+    return `"${value}"`;
+  } else if (typeof value === "object" && value !== null) {
+    return JSON.stringify(value);
+  } else {
+    return String(value);
   }
 }
 
@@ -794,13 +1089,13 @@ async function deleteServer(server) {
 
       const titleEl = elements.currentServerTitle();
       const pathEl = elements.currentServerPath();
-      const backupBtn = elements.backupBtn();
+      const changeLogBtn = elements.changeLogBtn();
       const saveBtn = elements.saveBtn();
       const editor = elements.configEditor();
 
       if (titleEl) titleEl.textContent = "서버를 선택해주세요";
       if (pathEl) pathEl.textContent = "";
-      if (backupBtn) backupBtn.disabled = true;
+      if (changeLogBtn) changeLogBtn.disabled = true;
       if (saveBtn) saveBtn.disabled = true;
       if (editor) editor.className = "editor-empty";
     }
@@ -1031,9 +1326,9 @@ function setupEventListeners() {
           e.preventDefault();
           saveCurrentConfig();
           break;
-        case "b":
+        case "l":
           e.preventDefault();
-          backupCurrentConfig();
+          viewChangeLog();
           break;
         case "r":
           e.preventDefault();
@@ -1049,6 +1344,7 @@ function setupEventListeners() {
     const addFromTemplateModal = document.getElementById(
       "addFromTemplateModal"
     );
+    const changeLogModal = document.getElementById("changeLogModal");
 
     if (event.target === addModal) {
       closeAddServerModal();
@@ -1058,6 +1354,9 @@ function setupEventListeners() {
     }
     if (event.target === addFromTemplateModal) {
       closeAddFromTemplateModal();
+    }
+    if (event.target === changeLogModal) {
+      closeChangeLogModal();
     }
   };
 }
@@ -1078,3 +1377,61 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   console.log("앱 로드 완료!");
 });
+
+// 숫자 필드 생성
+function createNumberField(key, value, path) {
+  const template = document.getElementById("numberFieldTemplate");
+  const clone = template.content.cloneNode(true);
+
+  clone.querySelector(".field-label").textContent = formatFieldLabel(key);
+  const input = clone.querySelector(".field-input");
+  input.value = value;
+
+  input.addEventListener("change", () => {
+    updateConfigValue(path, parseInt(input.value) || 0);
+  });
+
+  // 삭제 버튼 이벤트
+  const deleteBtn = clone.querySelector(".field-delete-btn");
+  deleteBtn.onclick = () => {
+    if (confirm(`'${formatFieldLabel(key)}' 필드를 삭제하시겠습니까?`)) {
+      deleteField(path);
+    }
+  };
+
+  return clone;
+}
+
+// 텍스트 필드 생성 (템플릿 사용)
+function createTextField(key, value, path) {
+  const template = document.getElementById("textFieldTemplate");
+  const clone = template.content.cloneNode(true);
+
+  // 데이터 바인딩
+  clone.querySelector(".field-label").textContent = formatFieldLabel(key);
+  const input = clone.querySelector(".field-input");
+  input.value = value;
+
+  // URL인 경우 특별 스타일 적용
+  if (
+    typeof value === "string" &&
+    (value.includes("http") || key.toLowerCase().includes("url"))
+  ) {
+    input.classList.add("url-field");
+  }
+
+  // 이벤트 바인딩
+  input.addEventListener("change", () => {
+    updateConfigValue(path, input.value);
+  });
+
+  // 삭제 버튼 이벤트
+  const deleteBtn = clone.querySelector(".field-delete-btn");
+  deleteBtn.onclick = () => {
+    if (confirm(`'${formatFieldLabel(key)}' 필드를 삭제하시겠습니까?`)) {
+      deleteField(path);
+    }
+  };
+
+  return clone;
+}
