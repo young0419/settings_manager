@@ -919,6 +919,7 @@ name = "eztalk_settings_manager"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "regex",
  "serde",
  "serde_json",
  "tauri",

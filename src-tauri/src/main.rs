@@ -118,8 +118,19 @@ fn list_server_files(base_directory: String, server_name: String) -> Result<Vec<
                 }
             }
             
-            // 파일명으로 정렬 (최신순)
-            files.sort_by(|a, b| b.cmp(a));
+            // 날짜 기반 정렬 (최신순)
+            files.sort_by(|a, b| {
+                let date_a = extract_date_from_filename(a).unwrap_or_else(|| "00000000".to_string());
+                let date_b = extract_date_from_filename(b).unwrap_or_else(|| "00000000".to_string());
+                
+                // 날짜가 같으면 파일명 전체로 비교
+                if date_a == date_b {
+                    b.cmp(a)
+                } else {
+                    date_b.cmp(&date_a) // 최신순 (내림차순)
+                }
+            });
+            
             Ok(files)
         },
         Err(e) => Err(format!("서버 폴더 읽기 오류: {}", e))
@@ -161,11 +172,23 @@ fn get_latest_config_file(server_folder: &str) -> Result<(String, String, usize)
                 return Err("설정 파일이 없습니다".to_string());
             }
             
-            // 파일명으로 정렬 (날짜순)
-            json_files.sort_by(|a, b| b.0.cmp(&a.0)); // 최신순
+            // 날짜 기반 정렬 (최신순)
+            json_files.sort_by(|a, b| {
+                let date_a = extract_date_from_filename(&a.0).unwrap_or_else(|| "00000000".to_string());
+                let date_b = extract_date_from_filename(&b.0).unwrap_or_else(|| "00000000".to_string());
+                
+                // 날짜가 같으면 파일명 전체로 비교
+                if date_a == date_b {
+                    b.0.cmp(&a.0)
+                } else {
+                    date_b.cmp(&date_a) // 최신순 (내림차순)
+                }
+            });
             
             let latest = &json_files[0];
-            let latest_date = extract_date_from_filename(&latest.0).unwrap_or_default();
+            let latest_date = extract_date_from_filename(&latest.0)
+                .map(|date| format!("{}-{}-{}", &date[0..4], &date[4..6], &date[6..8]))
+                .unwrap_or_default();
             
             Ok((latest.1.clone(), latest_date, json_files.len()))
         },
@@ -173,21 +196,42 @@ fn get_latest_config_file(server_folder: &str) -> Result<(String, String, usize)
     }
 }
 
-// 파일명에서 날짜 추출
+// 파일명에서 날짜 추출 (개선된 버전)
 fn extract_date_from_filename(filename: &str) -> Option<String> {
-    // 서버명_20250127.json -> 20250127 추출
+    // YYYYMMDD 패턴을 찾는 정규식
+    if let Some(captures) = regex::Regex::new(r"(\d{8})")
+        .ok()?
+        .captures(filename) {
+        if let Some(date_match) = captures.get(1) {
+            let date_str = date_match.as_str();
+            // 날짜 유효성 간단 검사
+            let year: i32 = date_str[0..4].parse().ok()?;
+            let month: i32 = date_str[4..6].parse().ok()?;
+            let day: i32 = date_str[6..8].parse().ok()?;
+            
+            // 기본적인 날짜 유효성 검사
+            if (2020..=2100).contains(&year) && (1..=12).contains(&month) && (1..=31).contains(&day) {
+                return Some(date_str.to_string());
+            }
+        }
+    }
+    
+    // 기존 방식도 시도 (하위 호환성)
     if let Some(underscore_pos) = filename.rfind('_') {
         if let Some(dot_pos) = filename.rfind('.') {
             let date_part = &filename[underscore_pos + 1..dot_pos];
             if date_part.len() == 8 && date_part.chars().all(|c| c.is_ascii_digit()) {
-                return Some(format!("{}-{}-{}", 
-                    &date_part[0..4], 
-                    &date_part[4..6], 
-                    &date_part[6..8]
-                ));
+                let year: i32 = date_part[0..4].parse().ok()?;
+                let month: i32 = date_part[4..6].parse().ok()?;
+                let day: i32 = date_part[6..8].parse().ok()?;
+                
+                if (2020..=2100).contains(&year) && (1..=12).contains(&month) && (1..=31).contains(&day) {
+                    return Some(date_part.to_string());
+                }
             }
         }
     }
+    
     None
 }
 
@@ -306,20 +350,6 @@ fn save_template_config(content: String) -> Result<String, String> {
     }
 }
 
-// 서버 삭제 (폴더 전체)
-#[command]
-fn delete_server(base_directory: String, server_name: String) -> Result<String, String> {
-    let server_folder = format!("{}\\{}", base_directory, server_name);
-    
-    // 백업을 위해 압축하거나 별도 위치로 이동
-    let backup_folder = format!("{}.deleted.{}", server_folder, Local::now().format("%Y%m%d_%H%M%S"));
-    
-    match fs::rename(&server_folder, &backup_folder) {
-        Ok(_) => Ok(format!("서버 폴더가 삭제되었습니다 (백업: {})", backup_folder)),
-        Err(e) => Err(format!("서버 삭제 오류: {}", e))
-    }
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 fn main() {
     tauri::Builder::default()
@@ -335,8 +365,7 @@ fn main() {
             get_template_config,
             save_template_config,
             create_new_server,
-            save_server_config,
-            delete_server
+            save_server_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

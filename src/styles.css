@@ -1,7 +1,7 @@
 /* 템플릿 모달 전용 */
 #templateModal .modal-content {
-  width: 800px;
-  max-width: 90vw;
+  width: 90vw;
+  max-width: 1000px; /* 또는 800px 유지해도 됨 */
   max-height: 90vh;
 }
 
@@ -1006,28 +1006,4 @@ body {
 
 .modal-content ::-webkit-scrollbar-thumb:hover {
   background: rgba(102, 126, 234, 0.6);
-}
-
-/* 🎯 템플릿 모달 전용 */
-#templateModal .modal-content {
-  width: 800px;
-  max-width: 90vw;
-  max-height: 90vh;
-}
-
-#templateEditor {
-  max-height: calc(90vh - 200px);
-  overflow-y: auto;
-  padding-right: 10px;
-}
-
-#addFromTemplateModal .modal-content {
-  width: 600px;
-  max-width: 90vw;
-}
-
-#templateItemsList {
-  max-height: 400px;
-  overflow-y: auto;
-  padding-right: 10px;
 }
