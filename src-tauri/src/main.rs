@@ -251,6 +251,136 @@ fn get_default_config_path() -> String {
     }
 }
 
+// 서버 복사
+#[command]
+fn copy_server(base_directory: String, source_server_name: String, target_server_name: String) -> Result<String, String> {
+    let source_folder = format!("{}\\{}", base_directory, source_server_name);
+    let target_folder = format!("{}\\{}", base_directory, target_server_name);
+    
+    // 원본 폴더 존재 확인
+    if !Path::new(&source_folder).exists() {
+        return Err(format!("원본 서버 '{}' 폴더가 존재하지 않습니다.", source_server_name));
+    }
+    
+    // 대상 폴더가 이미 존재하는지 확인
+    if Path::new(&target_folder).exists() {
+        return Err(format!("대상 서버 '{}' 폴더가 이미 존재합니다.", target_server_name));
+    }
+    
+    // 대상 폴더 생성
+    if let Err(e) = fs::create_dir_all(&target_folder) {
+        return Err(format!("대상 폴더 생성 오류: {}", e));
+    }
+    
+    // 원본 폴더의 모든 파일 복사
+    match copy_directory_contents(&source_folder, &target_folder, &source_server_name, &target_server_name) {
+        Ok(copied_files) => {
+            Ok(format!(
+                "서버 '{}' → '{}' 복사 완료. {} 개 파일이 복사되었습니다.", 
+                source_server_name, target_server_name, copied_files
+            ))
+        },
+        Err(e) => {
+            // 실패시 생성된 폴더 정리
+            let _ = fs::remove_dir_all(&target_folder);
+            Err(format!("파일 복사 오류: {}", e))
+        }
+    }
+}
+
+// 디렉토리 내용 복사 (파일명 변경 포함)
+fn copy_directory_contents(
+    source_dir: &str,
+    target_dir: &str,
+    source_name: &str,
+    target_name: &str
+) -> Result<usize, Box<dyn std::error::Error>> {
+    let mut copied_files = 0;
+    
+    for entry in fs::read_dir(source_dir)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        
+        if source_path.is_file() {
+            if let Some(file_name) = source_path.file_name() {
+                let file_name_str = file_name.to_string_lossy();
+                
+                // 파일명에서 서버명 변경
+                let new_file_name = if file_name_str.contains(source_name) {
+                    file_name_str.replace(source_name, target_name)
+                } else {
+                    file_name_str.to_string()
+                };
+                
+                let target_path = Path::new(target_dir).join(new_file_name);
+                
+                // JSON 파일인 경우 내용도 서버명 변경
+                if source_path.extension().is_some_and(|ext| ext == "json") {
+                    copy_and_update_json_file(&source_path, &target_path, source_name, target_name)?;
+                } else {
+                    // 일반 파일은 그대로 복사
+                    fs::copy(&source_path, &target_path)?;
+                }
+                
+                copied_files += 1;
+            }
+        }
+    }
+    
+    Ok(copied_files)
+}
+
+// JSON 파일 복사 및 내용 업데이트
+fn copy_and_update_json_file(
+    source_path: &Path,
+    target_path: &Path,
+    source_name: &str,
+    target_name: &str
+) -> Result<(), Box<dyn std::error::Error>> {
+    // 원본 JSON 읽기
+    let content = fs::read_to_string(source_path)?;
+    
+    // JSON 파싱 시도
+    match from_str::<Value>(&content) {
+        Ok(mut json_value) => {
+            // JSON 내용에서 서버명 관련 값들 업데이트
+            update_json_server_references(&mut json_value, source_name, target_name);
+            
+            // 예쁘게 포맷팅해서 저장
+            let formatted = to_string_pretty(&json_value)?;
+            fs::write(target_path, formatted)?;
+        },
+        Err(_) => {
+            // JSON 파싱 실패시 원본 그대로 복사
+            fs::copy(source_path, target_path)?;
+        }
+    }
+    
+    Ok(())
+}
+
+// JSON 내용에서 서버명 참조 업데이트
+fn update_json_server_references(json_value: &mut Value, source_name: &str, target_name: &str) {
+    match json_value {
+        Value::String(s) => {
+            if s.contains(source_name) {
+                *s = s.replace(source_name, target_name);
+            }
+        },
+        Value::Object(map) => {
+            for (_, value) in map.iter_mut() {
+                update_json_server_references(value, source_name, target_name);
+            }
+        },
+        Value::Array(arr) => {
+            for value in arr.iter_mut() {
+                update_json_server_references(value, source_name, target_name);
+            }
+        },
+        _ => {} // 다른 타입은 변경하지 않음
+    }
+}
+
 // 새 서버 폴더 생성
 #[command]
 fn create_new_server(base_directory: String, server_name: String, use_template: bool) -> Result<String, String> {
@@ -364,6 +494,7 @@ fn main() {
             get_default_config_path,
             get_template_config,
             save_template_config,
+            copy_server, // 새로 추가
             create_new_server,
             save_server_config
         ])

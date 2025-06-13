@@ -11,7 +11,7 @@ async function init() {
     // 작업 디렉토리 초기화
     await ServerManager.initializeWorkingDirectory();
 
-    // 템플릿 로드
+    // 템플릿 로드 (실패 시 여기서 throw 되어 catch 블록으로 이동)
     await ServerManager.loadTemplate();
 
     // 서버 목록 새로고침 및 렌더링
@@ -22,7 +22,7 @@ async function init() {
   } catch (error) {
     console.error("초기화 오류:", error);
     AppUtils.showNotification(
-      "초기화 중 오류가 발생했습니다: " + error,
+      "초기화 중 오류가 발생했습니다: " + error.message, // error.message 사용
       "error"
     );
   }
@@ -55,7 +55,7 @@ function renderServerList(serverList = null) {
 }
 
 /**
- * 서버 아이템 생성 (템플릿 사용)
+ * 서버 아이템 생성 (복사 버튼 추가)
  */
 function createServerItem(server) {
   const template = document.getElementById("serverItemTemplate");
@@ -72,11 +72,44 @@ function createServerItem(server) {
     detailsEl.textContent = "설정 확인 중...";
   }
 
-  // 이벤트 바인딩 - 전체 클릭시 서버 선택
+  // 서버 선택 이벤트
   const itemEl = clone.querySelector(".server-item");
-  itemEl.onclick = () => {
+  itemEl.onclick = (e) => {
+    // 복사 버튼 클릭시에는 서버 선택 안함
+    if (e.target.closest(".server-copy-btn")) return;
     selectServer(server);
   };
+
+  // 복사 버튼 추가
+  const serverActions = document.createElement("div");
+  serverActions.className = "server-actions";
+  serverActions.style.cssText = `
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    opacity: 0;
+    transition: opacity 0.2s;
+  `;
+
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "btn btn-secondary btn-mini server-copy-btn";
+  copyBtn.innerHTML = "📋 복사";
+  copyBtn.title = "이 서버 설정을 복사합니다";
+  copyBtn.onclick = (e) => {
+    e.stopPropagation();
+    showServerCopyDialog(server);
+  };
+
+  serverActions.appendChild(copyBtn);
+  itemEl.appendChild(serverActions);
+
+  // 호버 효과로 복사 버튼 표시
+  itemEl.addEventListener("mouseenter", () => {
+    serverActions.style.opacity = "1";
+  });
+  itemEl.addEventListener("mouseleave", () => {
+    serverActions.style.opacity = "0";
+  });
 
   // 활성 상태 표시 - ConfigEditor가 로드된 후에만 체크
   if (window.ConfigEditor) {
@@ -96,6 +129,7 @@ async function selectServer(server) {
   const configData = await ServerManager.loadServerConfig(server);
 
   // 기본 키 순서를 사용하여 순서 보정
+  // DEFAULT_KEY_ORDER 대신 ServerManager에서 로드된 템플릿 기반으로 키 순서 가져옴
   let keyOrder = ConfigEditor.getDefaultKeyOrder();
 
   // 현재 설정에 없는 키들은 마지막에 추가
@@ -143,6 +177,144 @@ async function saveCurrentConfig() {
   // 서버 목록 새로고침 후 현재 서버 다시 선택
   await refreshServerList();
   await selectServer(currentConfig.server);
+}
+
+/**
+ * 서버 복사 다이얼로그 표시
+ */
+function showServerCopyDialog(server) {
+  // 기본 복사본 이름 생성
+  const defaultName = `${server.name}_복사본`;
+
+  // 인라인 다이얼로그 생성
+  const dialog = document.createElement("div");
+  dialog.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    z-index: 10000;
+    min-width: 400px;
+  `;
+
+  dialog.innerHTML = `
+    <h3 style="margin: 0 0 1rem 0; color: #333;">📋 서버 복사</h3>
+    <p style="margin: 0 0 1rem 0; color: #666; font-size: 0.9rem;">
+      <strong>${server.name}</strong>의 설정을 복사합니다.
+    </p>
+    <div style="margin-bottom: 1rem;">
+      <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">새 서버 이름:</label>
+      <input type="text" id="newServerName" 
+             style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;" 
+             value="${defaultName}" placeholder="예: ${server.name}_개발">
+      <small style="color: #666; font-size: 0.75rem; margin-top: 0.25rem; display: block;">
+        서버 이름은 폴더명으로 사용됩니다.
+      </small>
+    </div>
+    <div style="text-align: right; margin-top: 1.5rem;">
+      <button id="cancelCopy" style="margin-right: 0.5rem; padding: 0.5rem 1rem; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer;">취소</button>
+      <button id="confirmCopy" style="padding: 0.5rem 1rem; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">📋 복사 시작</button>
+    </div>
+  `;
+
+  // 배경 오버레이
+  const overlay = document.createElement("div");
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 9999;
+  `;
+
+  document.body.appendChild(overlay);
+  document.body.appendChild(dialog);
+
+  // 이벤트 처리
+  const nameInput = dialog.querySelector("#newServerName");
+  const cancelBtn = dialog.querySelector("#cancelCopy");
+  const confirmBtn = dialog.querySelector("#confirmCopy");
+
+  nameInput.focus();
+  nameInput.select(); // 기본 이름 선택
+
+  function closeDialog() {
+    document.body.removeChild(overlay);
+    document.body.removeChild(dialog);
+  }
+
+  cancelBtn.onclick = closeDialog;
+  overlay.onclick = closeDialog;
+
+  confirmBtn.onclick = async () => {
+    const newName = nameInput.value.trim();
+    if (!newName) {
+      AppUtils.showNotification("서버 이름을 입력하세요.", "error");
+      nameInput.focus();
+      return;
+    }
+
+    if (newName === server.name) {
+      AppUtils.showNotification("다른 이름을 입력하세요.", "error");
+      nameInput.focus();
+      return;
+    }
+
+    closeDialog();
+    await executeServerCopy(server.name, newName);
+  };
+
+  // Enter 키로 복사 시작
+  nameInput.onkeypress = (e) => {
+    if (e.key === "Enter") confirmBtn.click();
+  };
+}
+
+/**
+ * 서버 복사 실행
+ */
+async function executeServerCopy(sourceServerName, targetServerName) {
+  try {
+    // 진행 상태 표시
+    AppUtils.showNotification(
+      `${sourceServerName} → ${targetServerName} 복사 중...`,
+      "info"
+    );
+    AppUtils.updateStatus("서버 복사 중...");
+
+    // 서버 복사 실행
+    await ServerManager.copyServer(sourceServerName, targetServerName);
+
+    // 성공 피드백
+    AppUtils.showNotification(
+      `✅ ${targetServerName} 서버가 성공적으로 복사되었습니다!`,
+      "success"
+    );
+    AppUtils.updateStatus("복사 완료");
+
+    // 서버 목록 새로고침
+    await refreshServerList();
+
+    // 새로 생성된 서버 자동 선택 (옵션)
+    const servers = ServerManager.getServerList();
+    const newServer = servers.find((s) => s.name === targetServerName);
+    if (newServer) {
+      selectServer(newServer);
+    }
+  } catch (error) {
+    console.error("서버 복사 오류:", error);
+    AppUtils.showNotification(
+      `❌ 복사 실패: ${error.message || error}`,
+      "error"
+    );
+    AppUtils.updateStatus("복사 실패");
+  }
 }
 
 /**
@@ -259,13 +431,28 @@ function renderChangeLog(logText) {
 async function openTemplateEditor() {
   const templateConfig = ServerManager.getTemplateConfig();
   if (!templateConfig) {
-    await ServerManager.loadTemplate();
+    AppUtils.showNotification(
+      "템플릿 설정이 로드되지 않아 템플릿 편집을 열 수 없습니다.",
+      "error"
+    );
+    return;
   }
 
   const modal = document.getElementById("templateModal");
   if (modal) {
     modal.style.display = "block";
-    renderTemplateEditor();
+    
+    // ConfigEditor의 통합 함수 사용 (경고 메시지 포함)
+    const templateEditor = document.getElementById("templateEditor");
+    if (templateEditor) {
+      templateEditor.innerHTML = "";
+      
+      // ConfigEditor의 renderTemplateEditor 사용 (경고 메시지가 이미 포함됨)
+      const editorElement = ConfigEditor.renderTemplateEditor(templateConfig);
+      if (editorElement) {
+        templateEditor.appendChild(editorElement);
+      }
+    }
   }
 }
 
@@ -277,407 +464,9 @@ function closeTemplateModal() {
   if (modal) modal.style.display = "none";
 }
 
-/**
- * 템플릿 에디터 렌더링
- */
-function renderTemplateEditor() {
-  const templateConfig = ServerManager.getTemplateConfig();
-  if (!templateConfig) return;
 
-  const templateEditor = document.getElementById("templateEditor");
-  if (!templateEditor) return;
 
-  templateEditor.innerHTML = "";
 
-  // 경고 메시지 추가
-  const warningDiv = document.createElement("div");
-  warningDiv.style.cssText = `
-    background: #fff3cd;
-    border: 1px solid #ffeaa7;
-    border-radius: 4px;
-    padding: 1rem;
-    margin-bottom: 1rem;
-    color: #856404;
-  `;
-  warningDiv.innerHTML = `
-    <strong>⚠️ 주의</strong><br>
-    템플릿 편집은 신중하게 하세요. 새 서버 생성시 기본값으로 사용됩니다.<br>
-    삭제 기능은 안전을 위해 비활성화되어 있습니다.
-  `;
-  templateEditor.appendChild(warningDiv);
-
-  // ConfigEditor의 동적 폼 생성 기능 재사용
-  const form = createDynamicFormForTemplate(templateConfig);
-  templateEditor.appendChild(form);
-}
-
-/**
- * 템플릿용 동적 폼 생성 (ConfigEditor의 함수 재사용)
- */
-function createDynamicFormForTemplate(obj, path = "template") {
-  const container = document.createElement("div");
-  const categories = groupConfigKeysForTemplate(obj);
-
-  for (const [categoryName, keys] of Object.entries(categories)) {
-    const section = createConfigSectionForTemplate(
-      categoryName,
-      obj,
-      keys,
-      path
-    );
-    container.appendChild(section);
-  }
-
-  return container;
-}
-
-/**
- * 템플릿용 키 그룹화
- */
-function groupConfigKeysForTemplate(obj) {
-  const categories = {};
-  const rootFields = [];
-
-  for (const key of Object.keys(obj)) {
-    if (
-      typeof obj[key] === "object" &&
-      obj[key] !== null &&
-      !Array.isArray(obj[key])
-    ) {
-      const categoryName = AppUtils.getCategoryName(key);
-      categories[categoryName] = [key];
-    } else {
-      rootFields.push(key);
-    }
-  }
-
-  const orderedCategories = {};
-  if (rootFields.length > 0) {
-    orderedCategories["기본 설정"] = rootFields;
-  }
-
-  Object.entries(categories).forEach(([key, value]) => {
-    orderedCategories[key] = value;
-  });
-
-  return orderedCategories;
-}
-
-/**
- * 템플릿용 설정 섹션 생성
- */
-function createConfigSectionForTemplate(categoryName, obj, keys, basePath) {
-  const template = document.getElementById("configSectionTemplate");
-  const clone = template.content.cloneNode(true);
-
-  clone.querySelector(".section-title").textContent = categoryName;
-  const content = clone.querySelector(".section-content");
-
-  // 템플릿에서는 섹션 삭제 기능 비활성화
-  const deleteBtn = clone.querySelector(".section-delete-btn");
-  deleteBtn.style.display = "none";
-
-  keys.forEach((key) => {
-    const field = createDynamicFieldForTemplate(
-      key,
-      obj[key],
-      basePath ? `${basePath}.${key}` : key
-    );
-    content.appendChild(field);
-  });
-
-  const header = clone.querySelector(".section-header");
-  header.addEventListener("click", () => {
-    const isExpanded = content.classList.contains("expanded");
-    content.classList.toggle("expanded");
-    header.querySelector(".toggle").textContent = isExpanded ? "▶" : "▼";
-  });
-
-  return clone;
-}
-
-/**
- * 템플릿용 동적 필드 생성
- */
-function createDynamicFieldForTemplate(key, value, path) {
-  if (typeof value === "boolean") {
-    return createCheckboxFieldForTemplate(key, value, path);
-  } else if (typeof value === "number") {
-    return createNumberFieldForTemplate(key, value, path);
-  } else if (typeof value === "string") {
-    return createTextFieldForTemplate(key, value, path);
-  } else if (Array.isArray(value)) {
-    return createArrayFieldForTemplate(key, value, path);
-  } else if (typeof value === "object" && value !== null) {
-    return createNestedObjectFieldForTemplate(key, value, path);
-  } else {
-    return createTextFieldForTemplate(key, value || "", path);
-  }
-}
-
-/**
- * 템플릿용 텍스트 필드 생성
- */
-function createTextFieldForTemplate(key, value, path) {
-  const template = document.getElementById("textFieldTemplate");
-  const clone = template.content.cloneNode(true);
-
-  clone.querySelector(".field-label").textContent =
-    AppUtils.formatFieldLabel(key);
-  const input = clone.querySelector(".field-input");
-  input.value = value;
-
-  input.addEventListener("change", () => {
-    updateTemplateValue(path, input.value);
-  });
-
-  // 템플릿에서는 삭제 버튼 숨김
-  const deleteBtn = clone.querySelector(".field-delete-btn");
-  deleteBtn.style.display = "none";
-
-  return clone;
-}
-
-/**
- * 템플릿용 숫자 필드 생성
- */
-function createNumberFieldForTemplate(key, value, path) {
-  const template = document.getElementById("numberFieldTemplate");
-  const clone = template.content.cloneNode(true);
-
-  clone.querySelector(".field-label").textContent =
-    AppUtils.formatFieldLabel(key);
-  const input = clone.querySelector(".field-input");
-  input.value = value;
-
-  input.addEventListener("change", () => {
-    updateTemplateValue(path, parseInt(input.value) || 0);
-  });
-
-  // 템플릿에서는 삭제 버튼 숨김
-  const deleteBtn = clone.querySelector(".field-delete-btn");
-  deleteBtn.style.display = "none";
-
-  return clone;
-}
-
-/**
- * 템플릿용 체크박스 필드 생성
- */
-function createCheckboxFieldForTemplate(key, value, path) {
-  const template = document.getElementById("checkboxFieldTemplate");
-  const clone = template.content.cloneNode(true);
-
-  clone.querySelector(".field-label").textContent =
-    AppUtils.formatFieldLabel(key);
-  const checkbox = clone.querySelector(".field-checkbox");
-  checkbox.checked = value;
-
-  checkbox.addEventListener("change", () => {
-    updateTemplateValue(path, checkbox.checked);
-  });
-
-  // 템플릿에서는 삭제 버튼 숨김
-  const deleteBtn = clone.querySelector(".field-delete-btn");
-  deleteBtn.style.display = "none";
-
-  return clone;
-}
-
-/**
- * 템플릿용 배열 필드 생성
- */
-function createArrayFieldForTemplate(key, array, path) {
-  const template = document.getElementById("arrayFieldTemplate");
-  const clone = template.content.cloneNode(true);
-
-  clone.querySelector(".field-label").textContent =
-    AppUtils.formatFieldLabel(key);
-  const tbody = clone.querySelector(".array-tbody");
-
-  // 배열 아이템들을 테이블 행으로 렌더링
-  array.forEach((item, index) => {
-    const row = createArrayRowForTemplate(item, `${path}[${index}]`, index);
-    tbody.appendChild(row);
-  });
-
-  // 추가 버튼 이벤트
-  const addButton = clone.querySelector(".array-add-btn");
-  addButton.addEventListener("click", () => {
-    addArrayItemForTemplate(array, path, tbody);
-  });
-
-  // 템플릿에서는 삭제 버튼 숨김
-  const deleteBtn = clone.querySelector(".field-delete-btn");
-  deleteBtn.style.display = "none";
-
-  return clone;
-}
-
-/**
- * 템플릿용 배열 행 생성
- */
-function createArrayRowForTemplate(item, itemPath, _index) {
-  const template = document.getElementById("arrayRowTemplate");
-  const clone = template.content.cloneNode(true);
-
-  const input = clone.querySelector(".array-input");
-  const deleteBtn = clone.querySelector(".array-delete-btn");
-  deleteBtn.style.display = "none";
-
-  if (typeof item === "object") {
-    input.value = JSON.stringify(item);
-    input.addEventListener("change", () => {
-      try {
-        const parsed = JSON.parse(input.value);
-        updateTemplateValue(itemPath, parsed);
-      } catch (e) {
-        console.error("JSON 파싱 오류:", e);
-        input.style.borderColor = "#e74c3c";
-      }
-    });
-  } else {
-    input.value = item;
-    input.addEventListener("change", () => {
-      updateTemplateValue(itemPath, input.value);
-    });
-  }
-
-  return clone;
-}
-
-/**
- * 템플릿용 중첩 객체 필드 생성 (삭제 버튼 없음)
- */
-function createNestedObjectFieldForTemplate(key, obj, path) {
-  const container = document.createElement("div");
-  container.className = "nested-object-container";
-  container.style.marginBottom = "1rem";
-
-  // 객체 헤더
-  const header = document.createElement("div");
-  header.className = "object-header";
-  header.style.cssText = `
-    display: flex;
-    align-items: center;
-    padding: 0.5rem;
-    background: #f8f9fa;
-    border-radius: 4px;
-    border-left: 3px solid #28a745;
-    margin-bottom: 0.5rem;
-    cursor: pointer;
-  `;
-
-  // 폴더 아이콘 및 제목
-  const toggleIcon = document.createElement("span");
-  toggleIcon.textContent = "📁";
-  toggleIcon.style.marginRight = "0.5rem";
-
-  const title = document.createElement("span");
-  title.textContent = `${AppUtils.formatFieldLabel(key)} (${
-    Object.keys(obj).length
-  }개 속성)`;
-  title.style.fontWeight = "600";
-  title.style.flex = "1";
-
-  header.appendChild(toggleIcon);
-  header.appendChild(title);
-
-  // 속성 목록 컨테이너
-  const content = document.createElement("div");
-  content.className = "object-content";
-  content.style.cssText = `
-    margin-left: 1.5rem;
-    border-left: 2px solid #e9ecef;
-    padding-left: 1rem;
-    display: block;
-  `;
-
-  // 각 속성을 템플릿용으로 생성
-  Object.entries(obj).forEach(([itemKey, item]) => {
-    const itemField = createDynamicFieldForTemplate(
-      itemKey,
-      item,
-      `${path}.${itemKey}`
-    );
-    if (itemField) {
-      content.appendChild(itemField);
-    }
-  });
-
-  // 헤더 클릭시 토글
-  header.onclick = () => {
-    const isVisible = content.style.display !== "none";
-    content.style.display = isVisible ? "none" : "block";
-    toggleIcon.textContent = isVisible ? "📂" : "📁";
-  };
-
-  container.appendChild(header);
-  container.appendChild(content);
-
-  return container;
-}
-
-/**
- * 템플릿용 배열 아이템 추가
- */
-function addArrayItemForTemplate(array, path, tbody) {
-  const newItem = typeof array[0] === "object" ? {} : "";
-  array.push(newItem);
-
-  const row = createArrayRowForTemplate(
-    newItem,
-    `${path}[${array.length - 1}]`,
-    array.length - 1
-  );
-  tbody.appendChild(row);
-
-  AppUtils.updateStatus("새 항목이 추가되었습니다.");
-}
-
-/**
- * 템플릿용 배열 행 제거
- */
-function removeArrayRowForTemplate(_itemPath, rowElement) {
-  rowElement.remove();
-  renderTemplateEditor(); // 전체 다시 렌더링으로 인덱스 재정렬
-  AppUtils.updateStatus("항목이 삭제되었습니다.");
-}
-
-/**
- * 템플릿 값 업데이트
- */
-function updateTemplateValue(path, value) {
-  const templateConfig = ServerManager.getTemplateConfig();
-  if (!templateConfig) return;
-
-  // "template." prefix 제거
-  const cleanPath = path.replace(/^template\./, "");
-  const keys = cleanPath.split(".");
-  let current = templateConfig;
-
-  for (let i = 0; i < keys.length - 1; i++) {
-    const key = keys[i];
-    if (key.includes("[") && key.includes("]")) {
-      const [arrayKey, indexStr] = key.split("[");
-      const index = parseInt(indexStr.replace("]", ""));
-      current = current[arrayKey][index];
-    } else {
-      current = current[key];
-    }
-  }
-
-  const finalKey = keys[keys.length - 1];
-  if (finalKey.includes("[") && finalKey.includes("]")) {
-    const [arrayKey, indexStr] = finalKey.split("[");
-    const index = parseInt(indexStr.replace("]", ""));
-    current[arrayKey][index] = value;
-  } else {
-    current[finalKey] = value;
-  }
-
-  AppUtils.updateStatus(`템플릿 ${cleanPath} 설정이 변경되었습니다.`);
-}
 
 /**
  * 템플릿 저장
@@ -831,7 +620,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 필수 객체들이 로드되었는지 확인
   if (!window.ServerManager || !window.ConfigEditor || !window.AppUtils) {
     console.error("필수 모듈들이 로드되지 않았습니다");
-    alert("애플리케이션 로드 중 오류가 발생했습니다.");
+    AppUtils.showNotification(
+      "애플리케이션 로드 중 오류가 발생했습니다.",
+      "error"
+    );
     return;
   }
 
@@ -839,21 +631,218 @@ document.addEventListener("DOMContentLoaded", async () => {
   const invoke = await AppUtils.waitForTauri();
 
   if (!invoke) {
-    alert("Tauri API를 로드할 수 없습니다.\n데스크톱 앱에서만 작동합니다.");
+    AppUtils.showNotification(
+      "Tauri API를 로드할 수 없습니다. 데스크톱 앱에서만 작동합니다.",
+      "error"
+    );
+    // Tauri API 로드 실패 시에도 더 이상 진행하지 않음
     return;
   }
 
   // 각 매니저에 invoke 함수 전달
   ServerManager.setInvokeFunction(invoke);
 
-  // 이벤트 리스너 설정
-  setupEventListeners();
-
   // 앱 초기화
-  await init();
+  await init(); // init에서 템플릿 로드 실패 시 throw하여 앱 종료
 
   console.log("앱 로드 완료!");
 });
+
+/**
+ * 템플릿 항목 추가 모달 표시
+ * @param {string} parentPath - 부모 경로 (비어있으면 최상위)
+ */
+function showAddTemplateItemModal(parentPath = "") {
+  const modalHTML = `
+    <div id="addTemplateItemModal" class="modal" style="display: block;">
+      <div class="modal-content" style="width: 400px; max-width: 90vw;">
+        <div class="modal-header">
+          <h3>${
+            parentPath ? `${parentPath}에 항목 추가` : "최상위에 항목 추가"
+          }</h3>
+        </div>
+        <div style="padding: 1rem;">
+          <div class="field-group">
+            <label class="field-label">항목 이름</label>
+            <input type="text" id="newItemKey" class="field-input" placeholder="예: newProperty">
+          </div>
+          <div class="field-group">
+            <label class="field-label">타입</label>
+            <select id="newItemType" class="field-input">
+              <option value="string">문자열</option>
+              <option value="number">숫자</option>
+              <option value="boolean">참/거짓</option>
+              <option value="array">배열</option>
+              <option value="object">객체</option>
+            </select>
+          </div>
+          <div class="field-group" id="defaultValueGroup">
+            <label class="field-label">기본값</label>
+            <input type="text" id="newItemValue" class="field-input" placeholder="기본값">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeAddTemplateItemModal()">취소</button>
+          <button class="btn btn-primary" onclick="addTemplateItem('${parentPath}')">추가</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // 기존 모달 제거
+  const existingModal = document.getElementById("addTemplateItemModal");
+  if (existingModal) existingModal.remove();
+
+  // 모달 추가
+  document.body.insertAdjacentHTML("beforeend", modalHTML);
+
+  // 타입 변경 시 기본값 입력 필드 업데이트
+  document.getElementById("newItemType").onchange = updateDefaultValueField;
+  updateDefaultValueField(); // 초기 설정
+
+  // 이름 입력 필드에 포커스
+  document.getElementById("newItemKey").focus();
+}
+
+/**
+ * 타입에 따른 기본값 필드 업데이트
+ */
+function updateDefaultValueField() {
+  const typeSelect = document.getElementById("newItemType");
+  const valueInput = document.getElementById("newItemValue");
+  const valueGroup = document.getElementById("defaultValueGroup");
+
+  if (!typeSelect || !valueInput) return;
+
+  const type = typeSelect.value;
+
+  switch (type) {
+    case "string":
+      valueInput.type = "text";
+      valueInput.placeholder = "예: Hello World";
+      valueGroup.style.display = "block";
+      break;
+    case "number":
+      valueInput.type = "number";
+      valueInput.placeholder = "예: 100";
+      valueGroup.style.display = "block";
+      break;
+    case "boolean":
+      valueInput.type = "text";
+      valueInput.placeholder = "true 또는 false";
+      valueGroup.style.display = "block";
+      break;
+    case "array":
+      valueInput.type = "text";
+      valueInput.placeholder = '["항목1", "항목2"]';
+      valueGroup.style.display = "block";
+      break;
+    case "object":
+      valueGroup.style.display = "none";
+      break;
+  }
+}
+
+/**
+ * 템플릿 항목 추가 모달 닫기
+ */
+function closeAddTemplateItemModal() {
+  const modal = document.getElementById("addTemplateItemModal");
+  if (modal) modal.remove();
+}
+
+/**
+ * 템플릿에 새 항목 추가
+ * @param {string} parentPath - 부모 경로
+ */
+function addTemplateItem(parentPath) {
+  const keyInput = document.getElementById("newItemKey");
+  const typeSelect = document.getElementById("newItemType");
+  const valueInput = document.getElementById("newItemValue");
+
+  if (!keyInput || !typeSelect) return;
+
+  const key = keyInput.value.trim();
+  const type = typeSelect.value;
+
+  if (!key) {
+    AppUtils.showNotification("항목 이름을 입력해주세요.", "error");
+    keyInput.focus();
+    return;
+  }
+
+  // 기본값 생성
+  let defaultValue;
+  switch (type) {
+    case "string":
+      defaultValue = valueInput.value || "";
+      break;
+    case "number":
+      defaultValue = parseInt(valueInput.value) || 0;
+      break;
+    case "boolean":
+      defaultValue = valueInput.value.toLowerCase() === "true";
+      break;
+    case "array":
+      try {
+        defaultValue = valueInput.value ? JSON.parse(valueInput.value) : [];
+      } catch (e) {
+        defaultValue = [];
+      }
+      break;
+    case "object":
+      defaultValue = {};
+      break;
+    default:
+      defaultValue = "";
+  }
+
+  // 템플릿에 항목 추가
+  const templateConfig = ServerManager.getTemplateConfig();
+  if (!templateConfig) {
+    AppUtils.showNotification("템플릿을 찾을 수 없습니다.", "error");
+    return;
+  }
+
+  // 경로에 따라 항목 추가
+  if (parentPath) {
+    const keys = parentPath.split(".");
+    let current = templateConfig;
+
+    for (const pathKey of keys) {
+      if (!current[pathKey]) {
+        current[pathKey] = {};
+      }
+      current = current[pathKey];
+    }
+
+    if (current[key]) {
+      AppUtils.showNotification(`'${key}' 항목이 이미 있습니다.`, "error");
+      return;
+    }
+
+    current[key] = defaultValue;
+  } else {
+    if (templateConfig[key]) {
+      AppUtils.showNotification(`'${key}' 항목이 이미 있습니다.`, "error");
+      return;
+    }
+
+    templateConfig[key] = defaultValue;
+  }
+
+  // 성공 메시지 및 UI 업데이트
+  AppUtils.showNotification(`'${key}' 항목이 추가되었습니다.`, "success");
+  closeAddTemplateItemModal();
+  
+  // 템플릿 에디터 재렌더링
+  const templateEditor = document.getElementById("templateEditor");
+  templateEditor.innerHTML = "";
+  const editorElement = ConfigEditor.renderTemplateEditor(templateConfig);
+  if (editorElement) {
+    templateEditor.appendChild(editorElement);
+  }
+}
 
 // 전역 함수들 (HTML에서 직접 호출되는 함수들)
 window.addNewServer = addNewServer;
@@ -869,3 +858,6 @@ window.saveTemplate = saveTemplate;
 window.openAddFromTemplateModal = openAddFromTemplateModal;
 window.closeAddFromTemplateModal = closeAddFromTemplateModal;
 window.addSelectedTemplateItems = addSelectedTemplateItems;
+window.showAddTemplateItemModal = showAddTemplateItemModal;
+window.closeAddTemplateItemModal = closeAddTemplateItemModal;
+window.addTemplateItem = addTemplateItem;

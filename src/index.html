@@ -26,10 +26,6 @@
 
         <!-- 서버 목록 섹션 -->
         <div class="server-list-section">
-          <div class="server-list-header">
-            <h3>서버 목록</h3>
-          </div>
-
           <div class="server-list-actions">
             <button class="btn btn-primary btn-small" onclick="addNewServer()">
               새 서버 추가
@@ -38,33 +34,23 @@
               class="btn btn-secondary btn-small"
               onclick="refreshServerList()"
             >
-              목록 새로고침
+              새로고침
             </button>
           </div>
 
-          <!-- 안내 문구 추가 -->
-          <div
-            style="
-              margin: 0.25rem 0;
-              padding: 0.25rem 0.5rem;
-              background: #f1f3f4;
-              border-radius: 3px;
-              font-size: 0.7rem;
-              color: #666;
-            "
-          >
-            💡 서버 삭제는 네트워크 폴더에서 직접 해주세요
+          <!-- 안내 문구 -->
+          <div class="server-tip">
+            서버 삭제는 네트워크 폴더에서 직접 해주세요
           </div>
 
           <!-- 서버 목록 컨테이너 -->
           <div class="server-list">
             <!-- 빈 상태 -->
             <div id="emptyServerState" class="empty-state hidden">
-              <div style="text-align: center; padding: 2rem; color: #666">
-                <div style="font-size: 2rem; margin-bottom: 1rem">📁</div>
-                <p>설정 파일이 없습니다.</p>
-                <p style="font-size: 0.75rem">새 서버를 추가해보세요.</p>
-              </div>
+              <p>설정 파일이 없습니다.</p>
+              <p style="font-size: 0.8rem; margin-top: 0.5rem">
+                새 서버를 추가해보세요.
+              </p>
             </div>
 
             <!-- 로딩 상태 -->
@@ -81,23 +67,23 @@
 
       <div class="main-content">
         <div class="header">
-          <h1>JSON 설정 관리자</h1>
-          <p>그룹웨어 메신저 설정을 쉽게 관리하세요</p>
+          <h1>설정 관리</h1>
+          <p>서버 설정 편집</p>
         </div>
 
         <div class="content-area">
           <div class="config-editor">
             <div class="editor-header">
               <div>
-                <h3 id="currentServerTitle">서버를 선택해주세요</h3>
+                <h3 id="currentServerTitle">서버 선택</h3>
                 <p
                   id="currentServerPath"
-                  style="color: #666; font-size: 0.75rem"
+                  style="color: #718096; font-size: 0.8rem"
                 ></p>
               </div>
               <div class="editor-actions">
                 <button
-                  class="btn btn-secondary"
+                  class="btn btn-secondary btn-small"
                   onclick="viewChangeLog()"
                   disabled
                   id="changeLogBtn"
@@ -105,7 +91,7 @@
                   변경 로그
                 </button>
                 <button
-                  class="btn btn-primary"
+                  class="btn btn-primary btn-small"
                   onclick="saveCurrentConfig()"
                   disabled
                   id="saveBtn"
@@ -119,12 +105,9 @@
             <div id="configEditor" class="editor-empty">
               <!-- 빈 상태 메시지 -->
               <div class="empty-message">
-                <div style="text-align: center; padding: 3rem; color: #666">
-                  <div style="font-size: 3rem; margin-bottom: 1rem">📋</div>
-                  <h3>서버를 선택해주세요</h3>
-                  <p style="font-size: 0.85rem">
-                    왼쪽 사이드바에서 편집할 서버를 선택하세요.
-                  </p>
+                <div class="empty-state">
+                  <h3>서버 선택</h3>
+                  <p>편집할 서버를 선택하세요</p>
                 </div>
               </div>
 

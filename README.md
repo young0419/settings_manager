@@ -1,13 +1,13 @@
 # EzTalk 설정 관리자
 
-> 그룹웨어 메신저 JSON 설정을 쉽게 관리하는 데스크톱 애플리케이션
+> 사내 그룹웨어 메신저 JSON 설정을 쉽게 관리하는 데스크톱 애플리케이션
 
 ## 🎯 주요 기능
 
 - **📁 서버별 설정 관리**: 개발/운영/스테이징 서버별 설정 파일 분리 관리
 - **🔄 동적 폼 생성**: JSON 구조에 따라 자동으로 편집 가능한 UI 생성
 - **📄 마스터 템플릿**: 새 서버 생성시 기본 설정 자동 적용
-- **💾 자동 백업**: 설정 변경시 자동으로 백업 파일 생성
+- **📅 날짜별 버전 관리**: 설정 저장시 날짜별 파일로 자동 관리 (동일 날짜 내 덮어쓰기)
 - **🎨 직관적 UI**: 복잡한 JSON도 쉽게 편집할 수 있는 사용자 친화적 인터페이스
 - **🔍 실시간 검증**: JSON 형식 오류 즉시 감지 및 알림
 
@@ -29,10 +29,6 @@
 ### 개발 환경 설정
 
 ```bash
-# 프로젝트 클론
-git clone https://github.com/your-repo/eztalk-settings-manager.git
-cd eztalk-settings-manager
-
 # 의존성 설치
 npm install
 
@@ -127,10 +123,10 @@ eztalk-settings-manager/
 - `Ctrl + S`: 현재 설정 저장
 - `Ctrl + R`: 서버 목록 새로고침
 
-## 🛡️ 보안 및 백업
+## 🛡️ 파일 관리 및 보안
 
-- 모든 설정 변경시 자동 백업 생성
-- 날짜별 버전 관리 (YYYYMMDD 형식)
+- 날짜별 설정 파일 버전 관리 (YYYYMMDD 형식)
+- 동일 날짜 내 여러 번 저장시 최신 내용으로 덮어쓰기
 - JSON 형식 검증으로 데이터 무결성 보장
 - 네트워크 경로 지원으로 팀 공유 가능
 
@@ -153,19 +149,7 @@ eztalk-settings-manager/
 
 ## 📄 라이선스
 
-MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
-
-## 🤝 기여하기
-
-1. 프로젝트 포크
-2. 기능 브랜치 생성 (`git checkout -b feature/새기능`)
-3. 변경사항 커밋 (`git commit -am '새 기능 추가'`)
-4. 브랜치 푸시 (`git push origin feature/새기능`)
-5. Pull Request 생성
-
-## 📞 지원
-
-문제가 발생하거나 기능 요청이 있으시면 [Issues](https://github.com/your-repo/eztalk-settings-manager/issues) 페이지에 등록해 주세요.
+사내 전용 도구입니다.
 
 ---
 

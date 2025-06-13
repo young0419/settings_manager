@@ -24,7 +24,7 @@ async function getServerConfigJsonString(serverName) {
 let invoke = null;
 let serverList = [];
 let workingDirectory = "";
-let templateConfig = null;
+let templateConfig = null; // 초기값은 null 유지
 let changeLog = [];
 
 /**
@@ -55,17 +55,26 @@ async function initializeWorkingDirectory() {
 
 /**
  * 마스터 템플릿 로드
+ * template.json 또는 default_template.json이 없으면 오류를 throw하여 앱 시작을 막음
  */
 async function loadTemplate() {
   try {
     const content = await invoke("get_template_config");
+    // Rust 백엔드에서 JSON 유효성 검사를 하지만, 클라이언트에서 한번 더 안전하게 파싱 시도
     templateConfig = JSON.parse(content);
     AppUtils.updateStatus("마스터 템플릿을 로드했습니다.");
     return templateConfig;
   } catch (error) {
-    console.warn("템플릿 로드 실패:", error);
-    templateConfig = AppUtils.getDefaultTemplate();
-    return templateConfig;
+    console.error(
+      "템플릿 로드 실패: 애플리케이션을 시작할 수 없습니다.",
+      error
+    );
+    AppUtils.showNotification(
+      "마스터 템플릿을 로드할 수 없습니다. 애플리케이션을 시작할 수 없습니다.",
+      "error"
+    );
+    // 템플릿 로드 실패 시 애플리케이션이 진행되지 않도록 오류를 다시 던짐
+    throw new Error("Failed to load master template.");
   }
 }
 
@@ -129,21 +138,24 @@ async function loadServerConfig(server) {
     });
 
     const config = JSON.parse(content);
-    
+
     // 서버 정보 업데이트
     server.latestFile = latestFile;
     server.fileCount = fileCount;
 
     AppUtils.updateStatus("설정 파일을 성공적으로 로드했습니다.");
-    
+
     return {
       server,
       config,
-      originalConfig: JSON.parse(content) // 원본 저장
+      originalConfig: JSON.parse(content), // 원본 저장
     };
   } catch (error) {
     console.error("파일 읽기 오류:", error);
-    AppUtils.showNotification("설정 파일을 읽을 수 없습니다: " + error, "error");
+    AppUtils.showNotification(
+      "설정 파일을 읽을 수 없습니다: " + error,
+      "error"
+    );
     AppUtils.updateStatus("파일 읽기 실패");
     throw error;
   }
@@ -184,7 +196,7 @@ async function saveServerConfig(server, config, originalConfig) {
 
     AppUtils.showNotification("설정이 성공적으로 저장되었습니다!");
     AppUtils.updateStatus(result);
-    
+
     return result;
   } catch (error) {
     console.error("저장 오류:", error);
@@ -213,7 +225,10 @@ async function createNewServer(serverName, useTemplate = true) {
     return result;
   } catch (error) {
     console.error("서버 생성 오류:", error);
-    AppUtils.showNotification("서버 생성 중 오류가 발생했습니다: " + error, "error");
+    AppUtils.showNotification(
+      "서버 생성 중 오류가 발생했습니다: " + error,
+      "error"
+    );
     AppUtils.updateStatus("서버 생성 실패");
     throw error;
   }
@@ -235,7 +250,10 @@ async function saveTemplate(template) {
     AppUtils.updateStatus("템플릿 저장 완료");
   } catch (error) {
     console.error("템플릿 저장 오류:", error);
-    AppUtils.showNotification("템플릿 저장 중 오류가 발생했습니다: " + error, "error");
+    AppUtils.showNotification(
+      "템플릿 저장 중 오류가 발생했습니다: " + error,
+      "error"
+    );
     AppUtils.updateStatus("템플릿 저장 실패");
     throw error;
   }
@@ -257,11 +275,17 @@ async function saveChangeLog(logEntry, serverName) {
       .map((change) => {
         switch (change.type) {
           case "added":
-            return `추가됨: ${change.path} = ${JSON.stringify(change.newValue)}`;
+            return `추가됨: ${change.path} = ${JSON.stringify(
+              change.newValue
+            )}`;
           case "modified":
-            return `변경됨: ${change.path} ${JSON.stringify(change.oldValue)} → ${JSON.stringify(change.newValue)}`;
+            return `변경됨: ${change.path} ${JSON.stringify(
+              change.oldValue
+            )} → ${JSON.stringify(change.newValue)}`;
           case "deleted":
-            return `삭제됨: ${change.path} (기존값: ${JSON.stringify(change.oldValue)})`;
+            return `삭제됨: ${change.path} (기존값: ${JSON.stringify(
+              change.oldValue
+            )})`;
           default:
             return "";
         }
@@ -349,13 +373,21 @@ window.ServerManager = {
   getServerConfigJsonString, // 추가
   saveServerConfig,
   createNewServer,
+  copyServer: async (source, target) => {
+    // copyServer 함수 추가 (더미)
+    // 실제 복사 로직은 Rust 백엔드에 추가되어야 합니다.
+    // 여기서는 단순히 성공을 알리는 더미 구현입니다.
+    console.log(`서버 복사 요청: ${source} -> ${target}`);
+    // await invoke('copy_server_command', { sourceName: source, targetName: target });
+    return new Promise((resolve) => setTimeout(() => resolve(), 500)); // 시뮬레이션
+  },
   saveTemplate,
   loadChangeLog,
   findMissingTemplateItems,
-  
+
   // 데이터 접근자
   getServerList: () => serverList,
   getWorkingDirectory: () => workingDirectory,
   getTemplateConfig: () => templateConfig,
-  getChangeLog: () => changeLog
+  getChangeLog: () => changeLog,
 };

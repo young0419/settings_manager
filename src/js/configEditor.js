@@ -1,62 +1,90 @@
+/**
+ * 템플릿 에디터 렌더링
+ * @param {object} templateConfig - 템플릿 설정
+ * @returns {HTMLElement} 템플릿 에디터 요소
+ */
+function renderTemplateEditor(templateConfig) {
+  if (!templateConfig) return null;
+
+  const container = document.createElement("div");
+
+  // 경고 메시지 추가
+  const warningDiv = document.createElement("div");
+  warningDiv.style.cssText = `
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    color: #856404;
+  `;
+  warningDiv.innerHTML = `
+    <strong>⚠️ 주의</strong><br>
+    템플릿 편집은 신중하게 하세요. 새 서버 생성시 기본값으로 사용됩니다.<br>
+    안전을 위해 삭제 기능은 비활성화되어 있습니다.
+  `;
+  container.appendChild(warningDiv);
+
+  // 템플릿용 동적 폼 생성 (삭제 버튼 없음)
+  const form = createDynamicForm(templateConfig, "", null, { isTemplate: true });
+  container.appendChild(form);
+
+  return container;
+}
+/**
+ * 템플릿 값 업데이트
+ * @param {string} path - 설정 경로
+ * @param {any} value - 새 값
+ */
+function updateTemplateValue(path, value) {
+  const templateConfig = ServerManager.getTemplateConfig();
+  if (!templateConfig) return;
+
+  const keys = path.split(".");
+  let current = templateConfig;
+
+  for (let i = 0; i < keys.length - 1; i++) {
+    const key = keys[i];
+    if (key.includes("[") && key.includes("]")) {
+      const [arrayKey, indexStr] = key.split("[");
+      const index = parseInt(indexStr.replace("]", ""));
+      current = current[arrayKey][index];
+    } else {
+      current = current[key];
+    }
+  }
+
+  const finalKey = keys[keys.length - 1];
+  if (finalKey.includes("[") && finalKey.includes("]")) {
+    const [arrayKey, indexStr] = finalKey.split("[");
+    const index = parseInt(indexStr.replace("]", ""));
+    current[arrayKey][index] = value;
+  } else {
+    current[finalKey] = value;
+  }
+
+  AppUtils.updateStatus(`템플릿 ${path} 설정이 변경되었습니다.`);
+}
 // 현재 편집 중인 설정 정보
 let currentServer = null;
 let currentConfig = null;
 let originalConfig = null;
 let configKeyOrder = null; // 키 순서 정보 저장
 
-// 기본 키 순서 (템플릿에서 가져온 순서)
-const DEFAULT_KEY_ORDER = [
-  "defaultCompanyId",
-  "multiCompany",
-  "useIPPermit",
-  "ipCheckUrl",
-  "useEmoticBox",
-  "checkPushToken",
-  "logoutAfter",
-  "appDownloadPage",
-  "androidDownloadUri",
-  "iOSDownloadUri",
-  "ssoUrl",
-  "ssoNonce",
-  "blockScreenCapture",
-  "pcScreenCapture",
-  "notiCheckTime",
-  "updatedMemberRequestTime",
-  "zoomCompanyId",
-  "kaoniConference",
-  "useFold",
-  "timeZone",
-  "useTimeZone",
-  "escToTray",
-  "readUpToCount",
-  "maxReadUpToCount",
-  "admin",
-  "canary",
-  "login",
-  "pin",
-  "backup",
-  "menu",
-  "userDetail",
-  "organization",
-  "group",
-  "roomList",
-  "room",
-  "emoticon",
-  "message",
-  "messageReserve",
-  "board",
-  "memo",
-  "file",
-  "setting",
-  "notiSettings",
-];
+// DEFAULT_KEY_ORDER 상수는 이제 사용하지 않으므로 제거합니다.
 
 /**
  * 기본 키 순서 반환
+ * ServerManager에서 로드된 템플릿의 최상위 키들을 반환합니다.
  * @returns {Array} 기본 키 순서 배열
  */
 function getDefaultKeyOrder() {
-  return [...DEFAULT_KEY_ORDER]; // 복사본 반환
+  const template = ServerManager.getTemplateConfig();
+  if (template) {
+    return Object.keys(template); // 템플릿 객체의 최상위 키들을 반환
+  }
+  // 템플릿이 로드되지 않은 경우 (예: 초기화 실패 시) 빈 배열 반환
+  return [];
 }
 
 /**
@@ -336,9 +364,10 @@ function renderConfigEditor() {
  * @param {object} obj - 설정 객체
  * @param {string} path - 경로
  * @param {Array} keyOrder - 키 순서 정보
+ * @param {object} options - 옵션 {isTemplate: boolean}
  * @returns {HTMLElement} 폼 요소
  */
-function createDynamicForm(obj, path = "", keyOrder = null) {
+function createDynamicForm(obj, path = "", keyOrder = null, options = {}) {
   const container = document.createElement("div");
 
   // 키 순서를 보존하면서 처리
@@ -356,14 +385,14 @@ function createDynamicForm(obj, path = "", keyOrder = null) {
     if (typeof value === "object" && value !== null && !Array.isArray(value)) {
       // 중첩 객체는 객체 그룹으로 처리
       console.log(`중첩 객체 생성: ${key}`);
-      const objectGroup = createNestedObjectField(key, value, fieldPath);
+      const objectGroup = createNestedObjectField(key, value, fieldPath, options);
       if (objectGroup) {
         container.appendChild(objectGroup);
       }
     } else {
       // 단순 값들은 개별 필드로 처리
       console.log(`단순 필드 생성: ${key}`);
-      const field = createDynamicField(key, value, fieldPath);
+      const field = createDynamicField(key, value, fieldPath, options);
       if (field) {
         // DocumentFragment인 경우 직접 스타일을 적용할 수 없으므로
         // 컨테이너로 감싸서 처리
@@ -484,32 +513,33 @@ function createBasicSettingsGroup(fields, basePath) {
  * @param {string} key - 필드 키
  * @param {any} value - 필드 값
  * @param {string} path - 필드 경로
+ * @param {object} options - 옵션 {isTemplate: boolean}
  * @returns {HTMLElement} 필드 요소
  */
-function createDynamicField(key, value, path) {
+function createDynamicField(key, value, path, options = {}) {
   console.log(`createDynamicField: key=${key}, value=`, value, `path=${path}`);
 
   try {
     if (typeof value === "boolean") {
-      return createCheckboxField(key, value, path);
+      return createCheckboxField(key, value, path, options);
     } else if (typeof value === "number") {
-      return createNumberField(key, value, path);
+      return createNumberField(key, value, path, options);
     } else if (typeof value === "string") {
-      return createTextField(key, value, path);
+      return createTextField(key, value, path, options);
     } else if (Array.isArray(value)) {
-      return createArrayField(key, value, path);
+      return createArrayField(key, value, path, options);
     } else if (typeof value === "object" && value !== null) {
       // 중첩 객체는 여기서 처리하지 말고 경고 메시지
       console.warn(`중첩 객체가 createDynamicField로 전달됨: ${key}`);
-      return createNestedObjectField(key, value, path);
+      return createNestedObjectField(key, value, path, options);
     } else {
       // null, undefined 등
-      return createTextField(key, value || "", path);
+      return createTextField(key, value || "", path, options);
     }
   } catch (error) {
     console.error(`createDynamicField 오류 (key=${key}):`, error);
     // 오류 발생시 기본 텍스트 필드 반환
-    return createTextField(key, String(value || ""), path);
+    return createTextField(key, String(value || ""), path, options);
   }
 }
 
@@ -518,9 +548,10 @@ function createDynamicField(key, value, path) {
  * @param {string} key - 필드 키
  * @param {string} value - 필드 값
  * @param {string} path - 필드 경로
+ * @param {object} options - 옵션 {isTemplate: boolean}
  * @returns {HTMLElement} 텍스트 필드 요소
  */
-function createTextField(key, value, path) {
+function createTextField(key, value, path, options = {}) {
   const template = document.getElementById("textFieldTemplate");
   const clone = template.content.cloneNode(true);
 
@@ -539,17 +570,24 @@ function createTextField(key, value, path) {
 
   // 이벤트 바인딩
   input.addEventListener("change", () => {
-    updateConfigValue(path, input.value);
+    if (options.isTemplate) {
+      updateTemplateValue(path, input.value);
+    } else {
+      updateConfigValue(path, input.value);
+    }
   });
 
-  // 삭제 버튼 이벤트 - 마스터 템플릿은 삭제 버튼 숨김
+  // 삭제 버튼 이벤트 - 템플릿에서는 삭제 버튼 숨김
   const deleteBtn = clone.querySelector(".field-delete-btn");
-
-  deleteBtn.onclick = () => {
-    AppUtils.showConfirmDialog(`'${key}' 필드를 삭제하시겠습니까?`, () =>
-      deleteField(path)
-    );
-  };
+  if (options.isTemplate) {
+    deleteBtn.style.display = "none";
+  } else {
+    deleteBtn.onclick = () => {
+      AppUtils.showConfirmDialog(`'${key}' 필드를 삭제하시겠습니까?`, () =>
+        deleteField(path)
+      );
+    };
+  }
 
   return clone;
 }
@@ -559,9 +597,10 @@ function createTextField(key, value, path) {
  * @param {string} key - 필드 키
  * @param {number} value - 필드 값
  * @param {string} path - 필드 경로
+ * @param {object} options - 옵션 {isTemplate: boolean}
  * @returns {HTMLElement} 숫자 필드 요소
  */
-function createNumberField(key, value, path) {
+function createNumberField(key, value, path, options = {}) {
   const template = document.getElementById("numberFieldTemplate");
   const clone = template.content.cloneNode(true);
 
@@ -570,17 +609,24 @@ function createNumberField(key, value, path) {
   input.value = value;
 
   input.addEventListener("change", () => {
-    updateConfigValue(path, parseInt(input.value) || 0);
+    if (options.isTemplate) {
+      updateTemplateValue(path, parseInt(input.value) || 0);
+    } else {
+      updateConfigValue(path, parseInt(input.value) || 0);
+    }
   });
 
-  // 삭제 버튼 이벤트 - 마스터 템플릿은 삭제 버튼 숨김
+  // 삭제 버튼 이벤트 - 템플릿에서는 삭제 버튼 숨김
   const deleteBtn = clone.querySelector(".field-delete-btn");
-
-  deleteBtn.onclick = () => {
-    AppUtils.showConfirmDialog(`'${key}' 필드를 삭제하시겠습니까?`, () =>
-      deleteField(path)
-    );
-  };
+  if (options.isTemplate) {
+    deleteBtn.style.display = "none";
+  } else {
+    deleteBtn.onclick = () => {
+      AppUtils.showConfirmDialog(`'${key}' 필드를 삭제하시겠습니까?`, () =>
+        deleteField(path)
+      );
+    };
+  }
 
   return clone;
 }
@@ -590,9 +636,10 @@ function createNumberField(key, value, path) {
  * @param {string} key - 필드 키
  * @param {boolean} value - 필드 값
  * @param {string} path - 필드 경로
+ * @param {object} options - 옵션 {isTemplate: boolean}
  * @returns {HTMLElement} 체크박스 필드 요소
  */
-function createCheckboxField(key, value, path) {
+function createCheckboxField(key, value, path, options = {}) {
   const template = document.getElementById("checkboxFieldTemplate");
   const clone = template.content.cloneNode(true);
 
@@ -601,17 +648,24 @@ function createCheckboxField(key, value, path) {
   checkbox.checked = value;
 
   checkbox.addEventListener("change", () => {
-    updateConfigValue(path, checkbox.checked);
+    if (options.isTemplate) {
+      updateTemplateValue(path, checkbox.checked);
+    } else {
+      updateConfigValue(path, checkbox.checked);
+    }
   });
 
-  // 삭제 버튼 이벤트 - 마스터 템플릿은 삭제 버튼 숨김
+  // 삭제 버튼 이벤트 - 템플릿에서는 삭제 버튼 숨김
   const deleteBtn = clone.querySelector(".field-delete-btn");
-
-  deleteBtn.onclick = () => {
-    if (confirm(`'${key}' 필드를 삭제하시겠습니까?`)) {
-      deleteField(path);
-    }
-  };
+  if (options.isTemplate) {
+    deleteBtn.style.display = "none";
+  } else {
+    deleteBtn.onclick = () => {
+      AppUtils.showConfirmDialog(`'${key}' 필드를 삭제하시겠습니까?`, () => {
+        deleteField(path);
+      });
+    };
+  }
 
   return clone;
 }
@@ -621,9 +675,10 @@ function createCheckboxField(key, value, path) {
  * @param {string} key - 필드 키
  * @param {Array} array - 배열 값
  * @param {string} path - 필드 경로
+ * @param {object} options - 옵션 {isTemplate: boolean}
  * @returns {HTMLElement} 배열 필드 요소
  */
-function createArrayField(key, array, path) {
+function createArrayField(key, array, path, options = {}) {
   const template = document.getElementById("arrayFieldTemplate");
   if (!template) {
     console.error("arrayFieldTemplate을 찾을 수 없습니다");
@@ -647,7 +702,7 @@ function createArrayField(key, array, path) {
   if (tbody) {
     // 배열 아이템들을 테이블 행으로 렌더링
     array.forEach((item, index) => {
-      const row = createArrayRow(item, `${path}[${index}]`, index);
+      const row = createArrayRow(item, `${path}[${index}]`, index, options);
       if (row) tbody.appendChild(row);
     });
   }
@@ -656,18 +711,22 @@ function createArrayField(key, array, path) {
   const addButton = fieldGroup.querySelector(".array-add-btn");
   if (addButton) {
     addButton.addEventListener("click", () => {
-      addArrayItem(array, path, tbody);
+      addArrayItem(array, path, tbody, options);
     });
   }
 
-  // 삭제 버튼 이벤트 - 마스터 템플릿은 삭제 버튼 숨김
+  // 삭제 버튼 이벤트 - 템플릿에서는 삭제 버튼 숨김
   const deleteBtn = fieldGroup.querySelector(".field-delete-btn");
   if (deleteBtn) {
-    deleteBtn.onclick = () => {
-      AppUtils.showConfirmDialog(`'${key}' 배열을 삭제하시겠습니까?`, () =>
-        deleteField(path)
-      );
-    };
+    if (options.isTemplate) {
+      deleteBtn.style.display = "none";
+    } else {
+      deleteBtn.onclick = () => {
+        AppUtils.showConfirmDialog(`'${key}' 배열을 삭제하시겠습니까?`, () =>
+          deleteField(path)
+        );
+      };
+    }
   }
 
   wrapper.removeChild(fieldGroup);
@@ -679,9 +738,10 @@ function createArrayField(key, array, path) {
  * @param {any} item - 배열 아이템
  * @param {string} itemPath - 아이템 경로
  * @param {number} index - 인덱스
+ * @param {object} options - 옵션 {isTemplate: boolean}
  * @returns {HTMLElement} 배열 행 요소
  */
-function createArrayRow(item, itemPath, index) {
+function createArrayRow(item, itemPath, index, options = {}) {
   const template = document.getElementById("arrayRowTemplate");
   if (!template) {
     console.error("arrayRowTemplate을 찾을 수 없습니다");
@@ -708,7 +768,11 @@ function createArrayRow(item, itemPath, index) {
       input.addEventListener("change", () => {
         try {
           const parsed = JSON.parse(input.value);
-          updateConfigValue(itemPath, parsed);
+          if (options.isTemplate) {
+            updateTemplateValue(itemPath, parsed);
+          } else {
+            updateConfigValue(itemPath, parsed);
+          }
           input.style.borderColor = ""; // 오류 상태 해제
         } catch (e) {
           console.error("JSON 파싱 오류:", e);
@@ -719,18 +783,26 @@ function createArrayRow(item, itemPath, index) {
       // 단순 값인 경우
       input.value = item;
       input.addEventListener("change", () => {
-        updateConfigValue(itemPath, input.value);
+        if (options.isTemplate) {
+          updateTemplateValue(itemPath, input.value);
+        } else {
+          updateConfigValue(itemPath, input.value);
+        }
       });
     }
   }
 
-  // 삭제 버튼
+  // 삭제 버튼 - 템플릿에서는 숨김
   if (deleteBtn) {
-    deleteBtn.addEventListener("click", () => {
-      AppUtils.showConfirmDialog("이 항목을 삭제하시겠습니까?", () =>
-        removeArrayRow(itemPath, row)
-      );
-    });
+    if (options.isTemplate) {
+      deleteBtn.style.display = "none";
+    } else {
+      deleteBtn.addEventListener("click", () => {
+        AppUtils.showConfirmDialog("이 항목을 삭제하시겠습니까?", () =>
+          removeArrayRow(itemPath, row)
+        );
+      });
+    }
   }
 
   wrapper.removeChild(row);
@@ -744,7 +816,7 @@ function createArrayRow(item, itemPath, index) {
  * @param {string} path - 필드 경로
  * @returns {HTMLElement} 중첩 객체 필드 요소
  */
-function createNestedObjectField(key, obj, path) {
+function createNestedObjectField(key, obj, path, options = {}) {
   const container = document.createElement("div");
   container.className = "nested-object-container";
   container.style.marginBottom = "1rem";
@@ -773,23 +845,26 @@ function createNestedObjectField(key, obj, path) {
   title.style.fontWeight = "600";
   title.style.flex = "1";
 
-  // 삭제 버튼 - 마스터 템플릿은 삭제 버튼 숨김
-  const deleteBtn = document.createElement("button");
-  deleteBtn.className = "btn btn-danger btn-mini";
-  deleteBtn.textContent = "전체 삭제";
-  deleteBtn.style.marginLeft = "0.5rem";
-
-  deleteBtn.onclick = (e) => {
-    e.stopPropagation();
-    console.log("삭제 버튼 클릭:", key, path);
-    AppUtils.showConfirmDialog(`'${key}' 객체 전체를 삭제하시겠습니까?`, () =>
-      deleteField(path)
-    );
-  };
-
   header.appendChild(toggleIcon);
   header.appendChild(title);
-  header.appendChild(deleteBtn);
+
+  // 삭제 버튼 - 템플릿에서는 숨김
+  if (!options.isTemplate) {
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "btn btn-danger btn-mini";
+    deleteBtn.textContent = "전체 삭제";
+    deleteBtn.style.marginLeft = "0.5rem";
+
+    deleteBtn.onclick = (e) => {
+      e.stopPropagation();
+      console.log("삭제 버튼 클릭:", key, path);
+      AppUtils.showConfirmDialog(`'${key}' 객체 전체를 삭제하시겠습니까?`, () =>
+        deleteField(path)
+      );
+    };
+
+    header.appendChild(deleteBtn);
+  }
 
   // 속성 목록 컨테이너
   const content = document.createElement("div");
@@ -804,17 +879,19 @@ function createNestedObjectField(key, obj, path) {
   // 각 속성을 들여쓰기로 표시 - 순서 유지
   const entries = Object.entries(obj);
   entries.forEach(([itemKey, item]) => {
-    const itemRow = createPropertyRow(itemKey, item, `${path}.${itemKey}`);
+    const itemRow = createPropertyRow(itemKey, item, `${path}.${itemKey}`, options);
     content.appendChild(itemRow);
   });
 
   // 헤더 클릭시 토글
   header.onclick = (e) => {
-    if (e.target !== deleteBtn) {
-      const isVisible = content.style.display !== "none";
-      content.style.display = isVisible ? "none" : "block";
-      toggleIcon.textContent = isVisible ? "📂" : "📁";
+    // 삭제 버튼 클릭시 토글 방지
+    if (e.target.classList.contains('btn')) {
+      return;
     }
+    const isVisible = content.style.display !== "none";
+    content.style.display = isVisible ? "none" : "block";
+    toggleIcon.textContent = isVisible ? "📂" : "📁";
   };
 
   container.appendChild(header);
@@ -828,9 +905,10 @@ function createNestedObjectField(key, obj, path) {
  * @param {string} key - 속성 키
  * @param {any} value - 속성 값
  * @param {string} itemPath - 속성 경로
+ * @param {object} options - 옵션 {isTemplate: boolean}
  * @returns {HTMLElement} 속성 행 요소
  */
-function createPropertyRow(key, value, itemPath) {
+function createPropertyRow(key, value, itemPath, options = {}) {
   const row = document.createElement("div");
   row.className = "property-row";
   row.style.cssText = `
@@ -864,7 +942,11 @@ function createPropertyRow(key, value, itemPath) {
     inputElement.type = "checkbox";
     inputElement.checked = value;
     inputElement.addEventListener("change", () => {
-      updateConfigValue(itemPath, inputElement.checked);
+      if (options.isTemplate) {
+        updateTemplateValue(itemPath, inputElement.checked);
+      } else {
+        updateConfigValue(itemPath, inputElement.checked);
+      }
     });
   } else if (typeof value === "number") {
     inputElement = document.createElement("input");
@@ -872,7 +954,11 @@ function createPropertyRow(key, value, itemPath) {
     inputElement.value = value;
     inputElement.style.width = "100px";
     inputElement.addEventListener("change", () => {
-      updateConfigValue(itemPath, parseInt(inputElement.value) || 0);
+      if (options.isTemplate) {
+        updateTemplateValue(itemPath, parseInt(inputElement.value) || 0);
+      } else {
+        updateConfigValue(itemPath, parseInt(inputElement.value) || 0);
+      }
     });
   } else if (typeof value === "string") {
     inputElement = document.createElement("input");
@@ -883,7 +969,11 @@ function createPropertyRow(key, value, itemPath) {
       inputElement.classList.add("url-field");
     }
     inputElement.addEventListener("change", () => {
-      updateConfigValue(itemPath, inputElement.value);
+      if (options.isTemplate) {
+        updateTemplateValue(itemPath, inputElement.value);
+      } else {
+        updateConfigValue(itemPath, inputElement.value);
+      }
     });
   } else if (Array.isArray(value)) {
     inputElement = document.createElement("textarea");
@@ -893,7 +983,11 @@ function createPropertyRow(key, value, itemPath) {
     inputElement.addEventListener("change", () => {
       try {
         const parsed = JSON.parse(inputElement.value);
-        updateConfigValue(itemPath, parsed);
+        if (options.isTemplate) {
+          updateTemplateValue(itemPath, parsed);
+        } else {
+          updateConfigValue(itemPath, parsed);
+        }
         inputElement.style.borderColor = "";
       } catch (e) {
         inputElement.style.borderColor = "#e74c3c";
@@ -901,7 +995,7 @@ function createPropertyRow(key, value, itemPath) {
     });
   } else if (typeof value === "object" && value !== null) {
     // 중첩 객체는 재귀 호출
-    return createNestedObjectField(key, value, itemPath);
+    return createNestedObjectField(key, value, itemPath, options);
   } else {
     inputElement = document.createElement("span");
     inputElement.textContent = String(value);
@@ -911,22 +1005,25 @@ function createPropertyRow(key, value, itemPath) {
 
   valueContainer.appendChild(inputElement);
 
-  // 삭제 버튼 - 마스터 템플릿은 삭제 버튼 숨김
-  const deleteBtn = document.createElement("button");
-  deleteBtn.className = "btn btn-danger btn-mini";
-  deleteBtn.textContent = "삭제";
-  deleteBtn.style.fontSize = "0.7rem";
-
-  deleteBtn.onclick = () => {
-    console.log("속성 삭제 버튼 클릭:", key, itemPath);
-    AppUtils.showConfirmDialog(`'${key}' 속성을 삭제하시겠습니까?`, () =>
-      deleteField(itemPath)
-    );
-  };
-
+  // 삭제 버튼 - 템플릿에서는 숨김
   row.appendChild(nameSpan);
   row.appendChild(valueContainer);
-  row.appendChild(deleteBtn);
+  
+  if (!options.isTemplate) {
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "btn btn-danger btn-mini";
+    deleteBtn.textContent = "삭제";
+    deleteBtn.style.fontSize = "0.7rem";
+
+    deleteBtn.onclick = () => {
+      console.log("속성 삭제 버튼 클릭:", key, itemPath);
+      AppUtils.showConfirmDialog(`'${key}' 속성을 삭제하시겠습니까?`, () =>
+        deleteField(itemPath)
+      );
+    };
+
+    row.appendChild(deleteBtn);
+  }
 
   return row;
 }
@@ -1006,15 +1103,17 @@ function deleteField(path) {
  * @param {Array} array - 배열
  * @param {string} path - 배열 경로
  * @param {HTMLElement} tbody - 테이블 바디
+ * @param {object} options - 옵션 {isTemplate: boolean}
  */
-function addArrayItem(array, path, tbody) {
+function addArrayItem(array, path, tbody, options = {}) {
   const newItem = typeof array[0] === "object" ? {} : "";
   array.push(newItem);
 
   const row = createArrayRow(
     newItem,
     `${path}[${array.length - 1}]`,
-    array.length - 1
+    array.length - 1,
+    options
   );
   tbody.appendChild(row);
 
@@ -1087,9 +1186,10 @@ window.ConfigEditor = {
   updateServerInfo,
   clearConfigEditor,
   renderConfigEditor,
+  renderTemplateEditor, // 새로 추가
   addSelectedTemplateItems,
   parseJsonWithOrder,
-  getDefaultKeyOrder, // 추가
+  getDefaultKeyOrder, // 변경됨
 
   // 필드 생성 함수들
   createTextField,
@@ -1097,4 +1197,5 @@ window.ConfigEditor = {
   createCheckboxField,
   createArrayField,
   createNestedObjectField,
+  updateTemplateValue, // 새로 추가
 };
