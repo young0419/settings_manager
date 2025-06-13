@@ -56,6 +56,9 @@ body {
   padding: 1.5rem;
   flex-shrink: 0;
   box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .sidebar h2 {
@@ -152,12 +155,9 @@ body {
 }
 
 .server-list-section {
-  margin-top: 1rem;
-}
-
-#serverListContainer {
-  flex: 1;
-  overflow-y: auto;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
@@ -194,6 +194,9 @@ body {
 
 .server-list {
   margin-bottom: 1.5rem;
+  flex-grow: 1;
+  overflow-y: auto;
+  padding-right: 0.4rem;
 }
 
 .server-item {
