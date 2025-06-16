@@ -15,6 +15,7 @@ const elements = {
   saveBtn: () => document.getElementById("saveBtn"),
   statusText: () => document.getElementById("statusText"),
   notification: () => document.getElementById("notification"),
+  templateModal: () => document.getElementById("templateModal"),
 };
 
 /**
@@ -219,7 +220,7 @@ function detectChanges(original, current, path = "") {
  */
 function showConfirmDialog(message, onConfirm, onCancel = null) {
   // 기존 대화상자가 있으면 제거
-  const existingDialog = document.getElementById('customConfirmDialog');
+  const existingDialog = document.getElementById("customConfirmDialog");
   if (existingDialog) {
     existingDialog.remove();
   }
@@ -227,27 +228,27 @@ function showConfirmDialog(message, onConfirm, onCancel = null) {
   // 대화상자 HTML 생성
   const dialogHTML = `
     <div id="customConfirmDialog" class="modal" style="display: block;">
-      <div class="modal-content" style="width: 400px; max-width: 90vw;">
-        <div class="modal-header">
-          <h3>확인</h3>
+      <div class="modal-content" style="width: 320px; max-width: 90vw; padding: 1.5rem;">
+        <div class="modal-header" style="margin-bottom: 1rem; padding-bottom: 0.75rem;">
+          <h3 style="font-size: 1.1rem; margin: 0;">확인</h3>
         </div>
-        <div style="padding: 1rem;">
-          <p>${message}</p>
+        <div style="margin-bottom: 1.5rem;">
+          <p style="margin: 0; font-size: 0.9rem; line-height: 1.4;">${message}</p>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" id="confirmCancel">취소</button>
-          <button class="btn btn-danger" id="confirmOk">확인</button>
+        <div class="modal-footer" style="margin: 0; gap: 0.5rem;">
+          <button class="btn btn-secondary btn-small" id="confirmCancel">취소</button>
+          <button class="btn btn-danger btn-small" id="confirmOk">확인</button>
         </div>
       </div>
     </div>
   `;
 
   // 대화상자를 바디에 추가
-  document.body.insertAdjacentHTML('beforeend', dialogHTML);
+  document.body.insertAdjacentHTML("beforeend", dialogHTML);
 
-  const dialog = document.getElementById('customConfirmDialog');
-  const cancelBtn = document.getElementById('confirmCancel');
-  const okBtn = document.getElementById('confirmOk');
+  const dialog = document.getElementById("customConfirmDialog");
+  const cancelBtn = document.getElementById("confirmCancel");
+  const okBtn = document.getElementById("confirmOk");
 
   // 이벤트 리스너 추가
   cancelBtn.onclick = () => {
@@ -270,13 +271,13 @@ function showConfirmDialog(message, onConfirm, onCancel = null) {
 
   // ESC 키로 닫기
   const handleEsc = (e) => {
-    if (e.key === 'Escape') {
+    if (e.key === "Escape") {
       dialog.remove();
-      document.removeEventListener('keydown', handleEsc);
+      document.removeEventListener("keydown", handleEsc);
       if (onCancel) onCancel();
     }
   };
-  document.addEventListener('keydown', handleEsc);
+  document.addEventListener("keydown", handleEsc);
 }
 
 // 내보내기
@@ -291,5 +292,5 @@ window.AppUtils = {
   getDefaultTemplate,
   waitForTauri,
   detectChanges,
-  showConfirmDialog
+  showConfirmDialog,
 };

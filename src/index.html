@@ -11,6 +11,12 @@
       <div class="sidebar">
         <h2>설정 관리</h2>
 
+        <!-- 현재 서버 상태 땅지 -->
+        <div id="currentServerBadge" class="current-server-badge hidden">
+          <span class="badge-label">현재 서버:</span>
+          <span class="badge-value"></span>
+        </div>
+
         <div class="path-display" id="workingDirectory">
           <span class="path-label">작업 경로:</span>
           <span class="path-value">로딩 중...</span>
@@ -137,33 +143,29 @@
         </div>
         <div>
           <div class="field-group">
-            <div class="field-content">
-              <label class="field-label">서버 이름</label>
-              <input
-                type="text"
-                id="serverName"
-                class="field-input"
-                placeholder="예: 개발서버"
-              />
-              <small style="color: #666; font-size: 0.7rem"
-                >서버 이름은 폴더명으로 사용됩니다.</small
-              >
-            </div>
+            <label class="field-label">서버 이름</label>
+            <input
+              type="text"
+              id="serverName"
+              class="field-input"
+              placeholder="예: 개발서버"
+              autocomplete="off"
+            />
+            <div></div>
           </div>
-          <div class="field-group">
-            <div class="field-checkbox-group">
-              <input
-                type="checkbox"
-                class="field-checkbox"
-                id="useTemplate"
-                checked
-              />
-              <label class="field-label" for="useTemplate">템플릿 사용</label>
-            </div>
-            <small style="color: #666; font-size: 0.7rem"
-              >체크하면 마스터 템플릿을 기반으로 생성됩니다.</small
-            >
+          <div class="help-text">서버 이름은 폴더명으로 사용됩니다.</div>
+          
+          <div class="field-checkbox-group" style="margin-top: 1rem;">
+            <label class="field-label" for="useTemplate">템플릿 사용</label>
+            <input
+              type="checkbox"
+              class="field-checkbox"
+              id="useTemplate"
+              checked
+            />
+            <div></div>
           </div>
+          <div class="help-text">체크하면 마스터 템플릿을 기반으로 생성됩니다.</div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="closeAddServerModal()">
@@ -178,28 +180,21 @@
 
     <!-- 템플릿 편집 모달 -->
     <div id="templateModal" class="modal">
-      <div class="modal-content">
+      <div
+        class="modal-content"
+        style="width: 90vw; max-width: 1000px; max-height: 90vh"
+      >
         <div class="modal-header">
           <h3>마스터 템플릿 편집</h3>
-          <p style="color: #666; margin-top: 0.5rem">
-            새 서버 생성시 기본으로 사용될 설정입니다
-          </p>
         </div>
-        <div
-          style="
-            max-height: calc(90vh - 200px);
-            overflow-y: auto;
-            padding-right: 10px;
-          "
-        >
-          <!-- 동적으로 생성되는 템플릿 에디터 -->
-          <div id="templateEditor">
-            <!-- JavaScript에서 동적으로 생성됨 -->
-          </div>
+
+        <div class="modal-content-body" style="max-height: calc(90vh - 200px); overflow-y: auto; padding-right: 10px;">
+          <div id="templateFormContainer"></div>
         </div>
+
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="closeTemplateModal()">
-            취소
+            닫기
           </button>
           <button class="btn btn-primary" onclick="saveTemplate()">
             템플릿 저장
@@ -267,7 +262,7 @@
       <div class="field-group">
         <div class="field-content">
           <label class="field-label"></label>
-          <input type="text" class="field-input" />
+          <input type="text" class="field-input" autocomplete="off" />
         </div>
         <button class="btn btn-danger btn-mini field-delete-btn">삭제</button>
       </div>
@@ -277,7 +272,7 @@
       <div class="field-group">
         <div class="field-content">
           <label class="field-label"></label>
-          <input type="number" class="field-input" />
+          <input type="number" class="field-input" autocomplete="off" />
         </div>
         <button class="btn btn-danger btn-mini field-delete-btn">삭제</button>
       </div>
@@ -319,7 +314,7 @@
     <template id="arrayRowTemplate">
       <tr class="array-row">
         <td>
-          <input type="text" class="array-input" />
+          <input type="text" class="array-input" autocomplete="off" />
         </td>
         <td>
           <button type="button" class="array-delete-btn">삭제</button>
@@ -361,6 +356,7 @@
     </template>
 
     <script src="js/utils.js"></script>
+    <script src="js/safeJSON.js"></script>
     <script src="js/serverManager.js"></script>
     <script src="js/configEditor.js"></script>
     <script src="main.js"></script>

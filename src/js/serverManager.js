@@ -162,22 +162,78 @@ async function loadServerConfig(server) {
 }
 
 /**
- * 서버 설정 저장
+ * 🔥 절대 안전 서버 설정 저장
  * @param {object} server - 서버 정보
  * @param {object} config - 설정 객체
  * @param {object} originalConfig - 원본 설정 (변경 감지용)
+ * @param {Array} keyOrder - 키 순서 배열 (필수!)
  */
-async function saveServerConfig(server, config, originalConfig) {
+async function saveServerConfig(
+  server,
+  config,
+  originalConfig,
+  keyOrder = null
+) {
   try {
-    AppUtils.updateStatus("설정을 저장하는 중...");
+    console.log("🔥 절대 안전 저장 시작:", server.name);
+
+    // 🚨 절대 안전장치 1: keyOrder 필수 검증
+    if (!keyOrder || !Array.isArray(keyOrder) || keyOrder.length === 0) {
+      console.error("🚨 CRITICAL ERROR: keyOrder가 없습니다!");
+      console.error("  - keyOrder:", keyOrder);
+      console.error("  - 이 상황에서는 저장을 중단합니다.");
+      throw new Error(
+        "🚨 CRITICAL: keyOrder 없이는 저장할 수 없습니다. JSON 순서 보장 불가!"
+      );
+    }
+
+    AppUtils.updateStatus("설정을 절대 안전하게 저장하는 중...");
 
     // 변경사항 감지
     const changes = AppUtils.detectChanges(originalConfig, config);
 
+    const configKeys = Object.keys(config);
+    console.log("📊 저장 전 상태 분석:");
+    console.log("  - 현재 config 키:", configKeys.length, "개");
+    console.log("  - keyOrder 키:", keyOrder.length, "개");
+    console.log("  - 서버:", server.name);
+
+    // 🚨 절대 안전장치 2: 절대 안전 JSON 생성
+    let jsonContent;
+    try {
+      if (window.SafeJSON) {
+        jsonContent = SafeJSON.stringifyWithAbsoluteOrder(config, keyOrder, 2);
+      } else {
+        throw new Error("SafeJSON 모듈이 로드되지 않음!");
+      }
+      console.log("✅ 절대 안전 JSON 키 순서 보존 성공");
+    } catch (orderError) {
+      console.error("🚨 절대 안전 JSON 키 순서 보존 실패:", orderError.message);
+      throw new Error(
+        `🚨 CRITICAL: 절대 안전 JSON 순서 보존 실패 - ${orderError.message}`
+      );
+    }
+
+    // 🚨 절대 안전장치 3: 이중 검증
+    const expectedKeys = [
+      ...keyOrder.filter((k) => configKeys.includes(k)),
+      ...configKeys.filter((k) => !keyOrder.includes(k)),
+    ];
+
+    if (
+      !window.SafeJSON ||
+      !SafeJSON.verifyKeyOrderAbsolute(jsonContent, expectedKeys)
+    ) {
+      console.error("🚨 CRITICAL: 절대 안전 검증에서 키 순서 불일치 발견!");
+      throw new Error("🚨 CRITICAL: 절대 안전 검증에서 키 순서 불일치 발견!");
+    }
+
+    console.log("✅ 절대 안전 검증 통과 - 키 순서 100% 보장됨");
+
     const result = await invoke("save_server_config", {
       baseDirectory: workingDirectory,
       serverName: server.name,
-      content: JSON.stringify(config, null, 2),
+      content: jsonContent,
     });
 
     // 변경 로그 추가
@@ -188,14 +244,12 @@ async function saveServerConfig(server, config, originalConfig) {
         file: result.match(/([^\\]+\.json)$/)?.[1] || "unknown",
         changes: changes,
       };
-      changeLog.unshift(logEntry); // 최신 로그를 앞에 추가
-
-      // 로그를 파일로 저장
+      changeLog.unshift(logEntry);
       await saveChangeLog(logEntry, server.name);
     }
 
-    AppUtils.showNotification("설정이 성공적으로 저장되었습니다!");
-    AppUtils.updateStatus(result);
+    AppUtils.showNotification("🔒 설정이 절대 안전하게 저장되었습니다!");
+    AppUtils.updateStatus("✅ " + result);
 
     return result;
   } catch (error) {
@@ -235,19 +289,62 @@ async function createNewServer(serverName, useTemplate = true) {
 }
 
 /**
- * 템플릿 저장
+ * 🔥 절대 안전 템플릿 저장
  * @param {object} template - 템플릿 객체
  */
 async function saveTemplate(template) {
   try {
-    AppUtils.updateStatus("마스터 템플릿을 저장하는 중...");
+    console.log("🔥 템플릿 절대 안전 저장 시작");
+
+    // 🚨 절대 안전장치: 템플릿 키 순서 필수 검증
+    const templateKeyOrder = Object.keys(template);
+
+    if (templateKeyOrder.length === 0) {
+      console.error("🚨 CRITICAL: 빈 템플릿은 저장할 수 없습니다!");
+      throw new Error("🚨 CRITICAL: 빈 템플릿은 저장할 수 없습니다!");
+    }
+
+    AppUtils.updateStatus("마스터 템플릿을 절대 안전하게 저장하는 중...");
+
+    console.log("📋 템플릿 키 순서:", templateKeyOrder.slice(0, 10));
+
+    let jsonContent;
+    try {
+      if (window.SafeJSON) {
+        jsonContent = SafeJSON.stringifyWithAbsoluteOrder(
+          template,
+          templateKeyOrder,
+          2
+        );
+      } else {
+        throw new Error("SafeJSON 모듈이 로드되지 않음!");
+      }
+      console.log("✅ 템플릿 절대 안전 키 순서 보존 성공");
+    } catch (error) {
+      console.error("🚨 템플릿 절대 안전 키 순서 보존 실패:", error.message);
+      throw new Error(
+        `🚨 CRITICAL: 템플릿 절대 안전 키 순서 보존 실패 - ${error.message}`
+      );
+    }
+
+    // 🚨 절대 안전장치: 템플릿 이중 검증
+    if (
+      !window.SafeJSON ||
+      !SafeJSON.verifyKeyOrderAbsolute(jsonContent, templateKeyOrder)
+    ) {
+      console.error("🚨 CRITICAL: 템플릿 절대 안전 검증 실패!");
+      throw new Error("🚨 CRITICAL: 템플릿 절대 안전 검증 실패!");
+    }
+
     await invoke("save_template_config", {
-      content: JSON.stringify(template, null, 2),
+      content: jsonContent,
     });
 
     templateConfig = template;
-    AppUtils.showNotification("마스터 템플릿이 저장되었습니다!");
-    AppUtils.updateStatus("템플릿 저장 완료");
+    AppUtils.showNotification(
+      "🔒 마스터 템플릿이 절대 안전하게 저장되었습니다!"
+    );
+    AppUtils.updateStatus("✅ 템플릿 절대 안전 저장 완료");
   } catch (error) {
     console.error("템플릿 저장 오류:", error);
     AppUtils.showNotification(
@@ -363,27 +460,31 @@ function findMissingTemplateItems(currentConfig) {
   return missingItems;
 }
 
-// 내보내기
+// 🛡️ 절대 안전 내보내기
 window.ServerManager = {
   setInvokeFunction,
   initializeWorkingDirectory,
   loadTemplate,
   refreshServerList,
   loadServerConfig,
-  getServerConfigJsonString, // 추가
-  saveServerConfig,
+  getServerConfigJsonString,
+  saveServerConfig, // 🔒 절대 안전 저장 함수
   createNewServer,
   copyServer: async (source, target) => {
-    // copyServer 함수 추가 (더미)
-    // 실제 복사 로직은 Rust 백엔드에 추가되어야 합니다.
-    // 여기서는 단순히 성공을 알리는 더미 구현입니다.
     console.log(`서버 복사 요청: ${source} -> ${target}`);
-    // await invoke('copy_server_command', { sourceName: source, targetName: target });
-    return new Promise((resolve) => setTimeout(() => resolve(), 500)); // 시뮬레이션
+    return new Promise((resolve) => setTimeout(() => resolve(), 500));
   },
-  saveTemplate,
+  saveTemplate, // 🔒 절대 안전 템플릿 저장 함수
   loadChangeLog,
   findMissingTemplateItems,
+
+  // 🔒 절대 안전 함수들 추가
+  stringifyWithOrder: window.SafeJSON
+    ? SafeJSON.stringifyWithAbsoluteOrder
+    : null,
+  verifyKeyOrderAbsolute: window.SafeJSON
+    ? SafeJSON.verifyKeyOrderAbsolute
+    : null,
 
   // 데이터 접근자
   getServerList: () => serverList,

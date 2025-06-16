@@ -17,6 +17,9 @@ async function init() {
     // 서버 목록 새로고침 및 렌더링
     const serverList = await ServerManager.refreshServerList();
     renderServerList(serverList);
+    
+    // 초기 상태에서 현재 서버 땅지 숨김
+    updateCurrentServerBadge(null);
 
     console.log("앱 초기화 완료");
   } catch (error) {
@@ -123,9 +126,36 @@ function createServerItem(server) {
 }
 
 /**
- * 서버 선택 (최신 파일 로드)
+ * 현재 서버 땅지 업데이트
+ * @param {object} server - 서버 정보 (null이면 숨김)
+ */
+function updateCurrentServerBadge(server) {
+  const badge = document.getElementById('currentServerBadge');
+  if (!badge) return;
+  
+  if (server) {
+    const badgeValue = badge.querySelector('.badge-value');
+    if (badgeValue) {
+      badgeValue.textContent = server.name;
+    }
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+/**
+ * 서버 선택 (최신 파일 로드) - 피드백 강화
  */
 async function selectServer(server) {
+  // 변경사항이 있으면 경고
+  if (window.ConfigEditor && window.ConfigEditor.hasChanges()) {
+    const confirmed = await showUnsavedChangesDialog();
+    if (!confirmed) {
+      return; // 사용자가 취소했음
+    }
+  }
+  
   const configData = await ServerManager.loadServerConfig(server);
 
   // 기본 키 순서를 사용하여 순서 보정
@@ -140,9 +170,6 @@ async function selectServer(server) {
     ...missingKeys,
   ];
 
-  console.log("사용할 키 순서:", keyOrder);
-  console.log("현재 객체 키 순서:", currentKeys);
-
   // ConfigEditor에 설정 데이터와 키 순서 전달
   ConfigEditor.setCurrentConfig(
     configData.server,
@@ -154,11 +181,54 @@ async function selectServer(server) {
   // UI 업데이트
   ConfigEditor.updateServerInfo(configData.server);
   ConfigEditor.renderConfigEditor();
+  
+  // 현재 서버 땅지 업데이트
+  updateCurrentServerBadge(configData.server);
+  
   renderServerList(); // 활성 상태 업데이트
 }
 
 /**
- * 설정 저장
+ * 저장 버튼 상태 관리
+ */
+function setSaveButtonState(state, text = null) {
+  const saveBtn = document.getElementById('saveBtn');
+  if (!saveBtn) return;
+  
+  // 기존 상태 클래스 제거
+  saveBtn.classList.remove('btn-loading', 'btn-success');
+  saveBtn.disabled = false;
+  
+  switch(state) {
+    case 'loading':
+      saveBtn.disabled = true;
+      saveBtn.classList.add('btn-loading');
+      if (text) saveBtn.textContent = text;
+      break;
+    case 'success':
+      saveBtn.classList.add('btn-success');
+      if (text) saveBtn.textContent = text;
+      // 2초 후 원래 상태로 복귀
+      setTimeout(() => {
+        saveBtn.classList.remove('btn-success');
+        saveBtn.textContent = '저장';
+      }, 2000);
+      break;
+    case 'error':
+      if (text) saveBtn.textContent = text;
+      // 3초 후 원래 상태로 복귀
+      setTimeout(() => {
+        saveBtn.textContent = '저장';
+      }, 3000);
+      break;
+    default:
+      if (text) saveBtn.textContent = text;
+      break;
+  }
+}
+
+/**
+ * 설정 저장 - 피드백 강화
  */
 async function saveCurrentConfig() {
   const currentConfig = ConfigEditor.getCurrentConfig();
@@ -168,15 +238,36 @@ async function saveCurrentConfig() {
     return;
   }
 
-  await ServerManager.saveServerConfig(
-    currentConfig.server,
-    currentConfig.config,
-    currentConfig.original
-  );
+  try {
+    // 저장 시작 피드백
+    setSaveButtonState('loading', '저장 중...');
+    
+    // 키 순서를 포함하여 저장 로직 실행
+    await ServerManager.saveServerConfig(
+      currentConfig.server,
+      currentConfig.config,
+      currentConfig.original,
+      configKeyOrder  // 키 순서 전달
+    );
 
-  // 서버 목록 새로고침 후 현재 서버 다시 선택
-  await refreshServerList();
-  await selectServer(currentConfig.server);
+    // 성공 피드백
+    setSaveButtonState('success', '저장 완료!');
+    
+    // 변경사항 플래그 초기화
+    if (window.ConfigEditor) {
+      window.ConfigEditor.markAsSaved();
+    }
+    
+    // 서버 목록 새로고침 후 현재 서버 다시 선택 (기존 로직 유지)
+    await refreshServerList();
+    await selectServer(currentConfig.server); // 땅지도 여기서 업데이트됨
+    
+  } catch (error) {
+    // 오류 피드백
+    console.error('저장 오류:', error);
+    setSaveButtonState('error', '저장 실패');
+    // 기존 오류 처리는 ServerManager에서 처리됨
+  }
 }
 
 /**
@@ -202,24 +293,25 @@ function showServerCopyDialog(server) {
   `;
 
   dialog.innerHTML = `
-    <h3 style="margin: 0 0 1rem 0; color: #333;">📋 서버 복사</h3>
-    <p style="margin: 0 0 1rem 0; color: #666; font-size: 0.9rem;">
-      <strong>${server.name}</strong>의 설정을 복사합니다.
-    </p>
-    <div style="margin-bottom: 1rem;">
-      <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">새 서버 이름:</label>
-      <input type="text" id="newServerName" 
-             style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;" 
-             value="${defaultName}" placeholder="예: ${server.name}_개발">
-      <small style="color: #666; font-size: 0.75rem; margin-top: 0.25rem; display: block;">
-        서버 이름은 폴더명으로 사용됩니다.
-      </small>
+  <h3 style="margin: 0 0 1rem 0; color: #333;">📋 서버 복사</h3>
+  <p style="margin: 0 0 1rem 0; color: #666; font-size: 0.9rem;">
+  <strong>${server.name}</strong>의 설정을 복사합니다.
+  </p>
+  <div style="margin-bottom: 1rem;">
+  <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">새 서버 이름:</label>
+  <input type="text" id="newServerName" 
+  style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;" 
+  value="${defaultName}" placeholder="예: ${server.name}_개발"
+         autocomplete="off">
+  <small style="color: #666; font-size: 0.75rem; margin-top: 0.25rem; display: block;">
+    서버 이름은 폴더명으로 사용됩니다.
+    </small>
+  </div>
+  <div style="text-align: right; margin-top: 1.5rem;">
+  <button id="cancelCopy" style="margin-right: 0.5rem; padding: 0.5rem 1rem; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer;">취소</button>
+    <button id="confirmCopy" style="padding: 0.5rem 1rem; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">📋 복사 시작</button>
     </div>
-    <div style="text-align: right; margin-top: 1.5rem;">
-      <button id="cancelCopy" style="margin-right: 0.5rem; padding: 0.5rem 1rem; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer;">취소</button>
-      <button id="confirmCopy" style="padding: 0.5rem 1rem; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">📋 복사 시작</button>
-    </div>
-  `;
+    `;
 
   // 배경 오버레이
   const overlay = document.createElement("div");
@@ -249,8 +341,25 @@ function showServerCopyDialog(server) {
     document.body.removeChild(dialog);
   }
 
-  cancelBtn.onclick = closeDialog;
-  overlay.onclick = closeDialog;
+  // ESC 키로 닫기
+  function handleKeydown(e) {
+    if (e.key === "Escape") {
+      closeDialog();
+      document.removeEventListener("keydown", handleKeydown);
+    } else if (e.key === "Enter") {
+      confirmBtn.click();
+    }
+  }
+  document.addEventListener("keydown", handleKeydown);
+
+  cancelBtn.onclick = () => {
+    closeDialog();
+    document.removeEventListener("keydown", handleKeydown);
+  };
+  overlay.onclick = () => {
+    closeDialog();
+    document.removeEventListener("keydown", handleKeydown);
+  };
 
   confirmBtn.onclick = async () => {
     const newName = nameInput.value.trim();
@@ -267,13 +376,11 @@ function showServerCopyDialog(server) {
     }
 
     closeDialog();
+    document.removeEventListener("keydown", handleKeydown);
     await executeServerCopy(server.name, newName);
   };
 
-  // Enter 키로 복사 시작
-  nameInput.onkeypress = (e) => {
-    if (e.key === "Enter") confirmBtn.click();
-  };
+  // Enter 키는 handleKeydown에서 처리됨
 }
 
 /**
@@ -321,6 +428,14 @@ async function executeServerCopy(sourceServerName, targetServerName) {
  * 서버 목록 새로고침
  */
 async function refreshServerList() {
+  // 변경사항이 있으면 경고
+  if (window.ConfigEditor && window.ConfigEditor.hasChanges()) {
+    const confirmed = await showUnsavedChangesDialog();
+    if (!confirmed) {
+      return; // 사용자가 취소했음
+    }
+  }
+  
   const serverList = await ServerManager.refreshServerList();
   renderServerList(serverList);
 }
@@ -328,7 +443,15 @@ async function refreshServerList() {
 /**
  * 새 서버 추가 모달 열기
  */
-function addNewServer() {
+async function addNewServer() {
+  // 변경사항이 있으면 경고
+  if (window.ConfigEditor && window.ConfigEditor.hasChanges()) {
+    const confirmed = await showUnsavedChangesDialog();
+    if (!confirmed) {
+      return; // 사용자가 취소했음
+    }
+  }
+  
   const modal = document.getElementById("addServerModal");
   if (modal) {
     modal.style.display = "block";
@@ -348,7 +471,46 @@ function closeAddServerModal() {
 }
 
 /**
- * 서버 생성
+ * 서버 생성 버튼 상태 관리
+ */
+function setCreateServerButtonState(state, text = null) {
+  const createBtn = document.querySelector('#addServerModal .btn-primary');
+  if (!createBtn) return;
+  
+  // 기존 상태 클래스 제거
+  createBtn.classList.remove('btn-loading', 'btn-success');
+  createBtn.disabled = false;
+  
+  switch(state) {
+    case 'loading':
+      createBtn.disabled = true;
+      createBtn.classList.add('btn-loading');
+      if (text) createBtn.textContent = text;
+      break;
+    case 'success':
+      createBtn.classList.add('btn-success');
+      if (text) createBtn.textContent = text;
+      // 1.5초 후 모달 닫기
+      setTimeout(() => {
+        closeAddServerModal();
+      }, 1500);
+      break;
+    case 'error':
+      if (text) createBtn.textContent = text;
+      // 3초 후 원래 상태로 복귀
+      setTimeout(() => {
+        createBtn.textContent = '생성';
+        createBtn.disabled = false;
+      }, 3000);
+      break;
+    default:
+      if (text) createBtn.textContent = text;
+      break;
+  }
+}
+
+/**
+ * 서버 생성 - 피드백 강화
  */
 async function createServerConfig() {
   const nameInput = document.getElementById("serverName");
@@ -361,18 +523,37 @@ async function createServerConfig() {
 
   if (!name) {
     AppUtils.showNotification("서버 이름을 입력해주세요.", "error");
+    nameInput.focus();
     return;
   }
 
-  await ServerManager.createNewServer(name, useTemplate);
-  closeAddServerModal();
-  await refreshServerList();
+  try {
+    // 생성 시작 피드백
+    setCreateServerButtonState('loading', '생성 중...');
+    
+    // 기존 생성 로직 실행
+    await ServerManager.createNewServer(name, useTemplate);
+    
+    // 성공 피드백
+    setCreateServerButtonState('success', '생성 완료!');
+    // 1.5초 후 모달이 자동으로 닫힘
+    
+    // 서버 목록 새로고침 (기존 로직 유지)
+    await refreshServerList();
+    
+  } catch (error) {
+    // 오류 피드백
+    console.error('서버 생성 오류:', error);
+    setCreateServerButtonState('error', '생성 실패');
+    // 기존 오류 처리는 ServerManager에서 처리됨
+  }
 }
 
 /**
  * 변경 로그 보기
  */
-function viewChangeLog() {
+async function viewChangeLog() {
+  // 변경사항이 있으면 경고 (로그는 읽기 전용이므로 경고 없이 열기)
   const modal = document.getElementById("changeLogModal");
   if (modal) {
     modal.style.display = "block";
@@ -429,8 +610,21 @@ function renderChangeLog(logText) {
  * 템플릿 편집 모달 열기
  */
 async function openTemplateEditor() {
+  // 변경사항이 있으면 경고
+  if (window.ConfigEditor && window.ConfigEditor.hasChanges()) {
+    const confirmed = await showUnsavedChangesDialog();
+    if (!confirmed) {
+      return; // 사용자가 취소했음
+    }
+  }
+  
+  console.log("템플릿 에디터 열기 시작");
+  
   const templateConfig = ServerManager.getTemplateConfig();
+  console.log("템플릿 설정:", templateConfig);
+  
   if (!templateConfig) {
+    console.error("템플릿 설정 없음");
     AppUtils.showNotification(
       "템플릿 설정이 로드되지 않아 템플릿 편집을 열 수 없습니다.",
       "error"
@@ -439,23 +633,46 @@ async function openTemplateEditor() {
   }
 
   const modal = document.getElementById("templateModal");
+  console.log("모달 요소:", modal);
+  
   if (modal) {
     modal.style.display = "block";
+    console.log("모달 열었음");
     
-    // ConfigEditor의 통합 함수 사용 (경고 메시지 포함)
-    const templateEditor = document.getElementById("templateEditor");
+    // 템플릿 에디터 렌더링
+    const templateEditor = document.getElementById("templateFormContainer");
+    console.log("템플릿 에디터 요소:", templateEditor);
+    
     if (templateEditor) {
       templateEditor.innerHTML = "";
+      console.log("템플릿 에디터 비움");
       
-      // ConfigEditor의 renderTemplateEditor 사용 (경고 메시지가 이미 포함됨)
+      // ConfigEditor의 카드 기반 렌더링 사용
+      console.log("렌더링 시작...");
       const editorElement = ConfigEditor.renderTemplateEditor(templateConfig);
+      console.log("렌더링 결과:", editorElement);
+      
       if (editorElement) {
         templateEditor.appendChild(editorElement);
+        console.log("에디터 요소 추가 완료");
+      } else {
+        console.error("에디터 요소가 null입니다");
+        const errorDiv = document.createElement("div");
+        errorDiv.innerHTML = `
+          <div style="text-align: center; padding: 2rem; color: #666;">
+            <h3>템플릿 렌더링 오류</h3>
+            <p>템플릿을 표시할 수 없습니다.</p>
+          </div>
+        `;
+        templateEditor.appendChild(errorDiv);
       }
+    } else {
+      console.error("templateFormContainer 요소를 찾을 수 없습니다");
     }
+  } else {
+    console.error("templateModal 요소를 찾을 수 없습니다");
   }
 }
-
 /**
  * 템플릿 모달 닫기
  */
@@ -464,18 +681,71 @@ function closeTemplateModal() {
   if (modal) modal.style.display = "none";
 }
 
-
-
-
+/**
+ * 템플릿 저장 버튼 상태 관리
+ */
+function setTemplateSaveButtonState(state, text = null) {
+  const saveBtn = document.querySelector('#templateModal .btn-primary');
+  if (!saveBtn) return;
+  
+  // 기존 상태 클래스 제거
+  saveBtn.classList.remove('btn-loading', 'btn-success');
+  saveBtn.disabled = false;
+  
+  switch(state) {
+    case 'loading':
+      saveBtn.disabled = true;
+      saveBtn.classList.add('btn-loading');
+      if (text) saveBtn.textContent = text;
+      break;
+    case 'success':
+      saveBtn.classList.add('btn-success');
+      if (text) saveBtn.textContent = text;
+      // 1.5초 후 모달 닫기
+      setTimeout(() => {
+        closeTemplateModal();
+      }, 1500);
+      break;
+    case 'error':
+      if (text) saveBtn.textContent = text;
+      // 3초 후 원래 상태로 복귀
+      setTimeout(() => {
+        saveBtn.textContent = '템플릿 저장';
+      }, 3000);
+      break;
+    default:
+      if (text) saveBtn.textContent = text;
+      break;
+  }
+}
 
 /**
- * 템플릿 저장
+ * 템플릿 저장 - 피드백 강화
  */
 async function saveTemplate() {
   const templateConfig = ServerManager.getTemplateConfig();
-  if (!templateConfig) return;
-  await ServerManager.saveTemplate(templateConfig);
-  closeTemplateModal();
+  if (!templateConfig) {
+    AppUtils.showNotification('템플릿 데이터를 찾을 수 없습니다.', 'error');
+    return;
+  }
+  
+  try {
+    // 저장 시작 피드백
+    setTemplateSaveButtonState('loading', '저장 중...');
+    
+    // 기존 저장 로직 실행
+    await ServerManager.saveTemplate(templateConfig);
+    
+    // 성공 피드백
+    setTemplateSaveButtonState('success', '저장 완료!');
+    // 1.5초 후 모달이 자동으로 닫힘
+    
+  } catch (error) {
+    // 오류 피드백
+    console.error('템플릿 저장 오류:', error);
+    setTemplateSaveButtonState('error', '저장 실패');
+    // 기존 오류 처리는 ServerManager에서 처리됨
+  }
 }
 
 /**
@@ -565,7 +835,15 @@ function addSelectedTemplateItems() {
  * 이벤트 리스너 설정
  */
 function setupEventListeners() {
+  // 키보드 단축키
   document.addEventListener("keydown", (e) => {
+    // ESC 키로 모달 닫기
+    if (e.key === "Escape") {
+      closeTopModal();
+      return;
+    }
+    
+    // Ctrl/Cmd 단축키들
     if (e.ctrlKey || e.metaKey) {
       switch (e.key) {
         case "s":
@@ -581,6 +859,17 @@ function setupEventListeners() {
           refreshServerList();
           break;
       }
+    }
+  });
+  
+  // 변경사항 저장 전 나가기 경고
+  window.addEventListener('beforeunload', (e) => {
+    if (window.ConfigEditor && window.ConfigEditor.hasChanges()) {
+      console.log('페이지 나가기 시도 감지: 변경사항 있음');
+      e.preventDefault();
+      const message = '저장되지 않은 변경사항이 있습니다. 정말 나가시겠습니까?';
+      e.returnValue = message;
+      return message;
     }
   });
 
@@ -606,6 +895,122 @@ function setupEventListeners() {
       closeChangeLogModal();
     }
   };
+}
+
+/**
+ * 최상위 열린 모달 닫기 (ESC 키용)
+ */
+function closeTopModal() {
+  // 동적으로 생성된 모달들 체크
+  const dynamicModal = document.getElementById("addTemplateItemModal");
+  if (dynamicModal && dynamicModal.style.display === "block") {
+    closeAddTemplateItemModal();
+    return;
+  }
+  
+  // 정적 모달들 체크 (나중에 열린 것부터)
+  const modals = [
+    { id: "changeLogModal", closeFunc: closeChangeLogModal },
+    { id: "addFromTemplateModal", closeFunc: closeAddFromTemplateModal },
+    { id: "templateModal", closeFunc: closeTemplateModal },
+    { id: "addServerModal", closeFunc: closeAddServerModal }
+  ];
+  
+  for (const modal of modals) {
+    const element = document.getElementById(modal.id);
+    if (element && element.style.display === "block") {
+      modal.closeFunc();
+      return;
+    }
+  }
+}
+
+/**
+ * 저장되지 않은 변경사항 경고 다이얼로그
+ * @returns {Promise<boolean>} 사용자가 계속을 선택했는지 여부
+ */
+function showUnsavedChangesDialog() {
+  return new Promise((resolve) => {
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 2rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+      z-index: 10001;
+      min-width: 400px;
+      text-align: center;
+    `;
+    
+    dialog.innerHTML = `
+      <h3 style="margin: 0 0 1rem 0; color: #e74c3c;">⚠️ 저장되지 않은 변경사항</h3>
+      <p style="margin: 0 0 1.5rem 0; color: #666; line-height: 1.5;">
+        저장되지 않은 변경사항이 있습니다.<br>
+        변경사항을 잃고 계속하시겠습니까?
+      </p>
+      <div style="display: flex; gap: 0.5rem; justify-content: center;">
+        <button id="unsavedCancel" class="btn btn-secondary">취소</button>
+        <button id="unsavedSave" class="btn btn-primary">저장 후 계속</button>
+        <button id="unsavedDiscard" class="btn btn-danger">다 버리고 계속</button>
+      </div>
+    `;
+    
+    // 배경 오버레이
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 10000;
+    `;
+    
+    document.body.appendChild(overlay);
+    document.body.appendChild(dialog);
+    
+    function cleanup() {
+      document.body.removeChild(overlay);
+      document.body.removeChild(dialog);
+    }
+    
+    // 이벤트 처리
+    dialog.querySelector('#unsavedCancel').onclick = () => {
+      cleanup();
+      resolve(false);
+    };
+    
+    dialog.querySelector('#unsavedSave').onclick = async () => {
+      cleanup();
+      try {
+        await saveCurrentConfig();
+        resolve(true);
+      } catch (error) {
+        console.error('저장 오류:', error);
+        resolve(false);
+      }
+    };
+    
+    dialog.querySelector('#unsavedDiscard').onclick = () => {
+      cleanup();
+      resolve(true);
+    };
+    
+    // ESC 키로 취소
+    function handleKeydown(e) {
+      if (e.key === 'Escape') {
+        cleanup();
+        resolve(false);
+        document.removeEventListener('keydown', handleKeydown);
+      }
+    }
+    document.addEventListener('keydown', handleKeydown);
+  });
 }
 
 /**
@@ -642,6 +1047,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 각 매니저에 invoke 함수 전달
   ServerManager.setInvokeFunction(invoke);
 
+  // 이벤트 리스너 설정
+  setupEventListeners();
+
   // 앱 초기화
   await init(); // init에서 템플릿 로드 실패 시 throw하여 앱 종료
 
@@ -664,7 +1072,7 @@ function showAddTemplateItemModal(parentPath = "") {
         <div style="padding: 1rem;">
           <div class="field-group">
             <label class="field-label">항목 이름</label>
-            <input type="text" id="newItemKey" class="field-input" placeholder="예: newProperty">
+            <input type="text" id="newItemKey" class="field-input" placeholder="예: newProperty" autocomplete="off">
           </div>
           <div class="field-group">
             <label class="field-label">타입</label>
@@ -678,7 +1086,7 @@ function showAddTemplateItemModal(parentPath = "") {
           </div>
           <div class="field-group" id="defaultValueGroup">
             <label class="field-label">기본값</label>
-            <input type="text" id="newItemValue" class="field-input" placeholder="기본값">
+            <input type="text" id="newItemValue" class="field-input" placeholder="기본값" autocomplete="off">
           </div>
         </div>
         <div class="modal-footer">
@@ -695,6 +1103,24 @@ function showAddTemplateItemModal(parentPath = "") {
 
   // 모달 추가
   document.body.insertAdjacentHTML("beforeend", modalHTML);
+  
+  // ESC 키 지원 추가
+  function handleTemplateModalKeydown(e) {
+    if (e.key === "Escape") {
+      closeAddTemplateItemModal();
+      document.removeEventListener("keydown", handleTemplateModalKeydown);
+    } else if (e.key === "Enter") {
+      addTemplateItem(parentPath);
+    }
+  }
+  document.addEventListener("keydown", handleTemplateModalKeydown);
+  
+  // 모달 닫기 시 이벤트 리스너 제거
+  const originalClose = window.closeAddTemplateItemModal;
+  window.closeAddTemplateItemModal = function() {
+    document.removeEventListener("keydown", handleTemplateModalKeydown);
+    originalClose();
+  };
 
   // 타입 변경 시 기본값 입력 필드 업데이트
   document.getElementById("newItemType").onchange = updateDefaultValueField;
@@ -834,7 +1260,7 @@ function addTemplateItem(parentPath) {
   // 성공 메시지 및 UI 업데이트
   AppUtils.showNotification(`'${key}' 항목이 추가되었습니다.`, "success");
   closeAddTemplateItemModal();
-  
+
   // 템플릿 에디터 재렌더링
   const templateEditor = document.getElementById("templateEditor");
   templateEditor.innerHTML = "";
@@ -861,3 +1287,4 @@ window.addSelectedTemplateItems = addSelectedTemplateItems;
 window.showAddTemplateItemModal = showAddTemplateItemModal;
 window.closeAddTemplateItemModal = closeAddTemplateItemModal;
 window.addTemplateItem = addTemplateItem;
+window.showUnsavedChangesDialog = showUnsavedChangesDialog;

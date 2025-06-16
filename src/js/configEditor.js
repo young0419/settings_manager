@@ -1,34 +1,51 @@
 /**
- * 템플릿 에디터 렌더링
+ * 템플릿 에디터 렌더링 - 올바른 버전
  * @param {object} templateConfig - 템플릿 설정
  * @returns {HTMLElement} 템플릿 에디터 요소
  */
 function renderTemplateEditor(templateConfig) {
-  if (!templateConfig) return null;
+  console.log("템플릿 에디터 렌더링 시작:", templateConfig);
+  
+  if (!templateConfig) {
+    console.error("템플릿 설정이 없습니다");
+    return null;
+  }
 
   const container = document.createElement("div");
-
+  container.className = "template-editor-container";
+  
   // 경고 메시지 추가
-  const warningDiv = document.createElement("div");
-  warningDiv.style.cssText = `
-    background: #fff3cd;
-    border: 1px solid #ffeaa7;
-    border-radius: 4px;
-    padding: 1rem;
-    margin-bottom: 1rem;
-    color: #856404;
+  const warning = document.createElement("div");
+  warning.className = "template-warning";
+  warning.innerHTML = `
+    <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
+      <h4 style="margin: 0 0 0.5rem 0; color: #856404; font-size: 0.9rem;">⚠️ 주의</h4>
+      <p style="margin: 0; font-size: 0.8rem; color: #856404; line-height: 1.4;">
+        템플릿 변경은 신중하게 하세요. 새 서버 생성시 기본값으로 사용됩니다.<br>
+        안전을 위해 삭제 기능은 비활성화되어 있습니다.
+      </p>
+    </div>
   `;
-  warningDiv.innerHTML = `
-    <strong>⚠️ 주의</strong><br>
-    템플릿 편집은 신중하게 하세요. 새 서버 생성시 기본값으로 사용됩니다.<br>
-    안전을 위해 삭제 기능은 비활성화되어 있습니다.
-  `;
-  container.appendChild(warningDiv);
+  container.appendChild(warning);
 
-  // 템플릿용 동적 폼 생성 (삭제 버튼 없음)
-  const form = createDynamicForm(templateConfig, "", null, { isTemplate: true });
-  container.appendChild(form);
-
+  // 템플릿 설정을 일반 편집처럼 렌더링 (카드 섹션 사용)
+  try {
+    console.log("createDynamicForm 호출 중...");
+    const templateForm = createDynamicForm(templateConfig, "", null, {
+      isTemplate: true,
+    });
+    console.log("템플릿 폼 생성 완료:", templateForm);
+    
+    container.appendChild(templateForm);
+  } catch (error) {
+    console.error("템플릿 폼 생성 오류:", error);
+    const errorDiv = document.createElement("div");
+    errorDiv.textContent = "템플릿 렌더링 오류: " + error.message;
+    errorDiv.style.color = "red";
+    container.appendChild(errorDiv);
+  }
+  
+  console.log("최종 컨테이너:", container);
   return container;
 }
 /**
@@ -63,6 +80,8 @@ function updateTemplateValue(path, value) {
     current[finalKey] = value;
   }
 
+  // 템플릿 변경사항도 추적 (템플릿에 대한 별도 플래그는 사용하지 않음)
+  console.log(`템플릿 변경: ${path} = ${value}`);
   AppUtils.updateStatus(`템플릿 ${path} 설정이 변경되었습니다.`);
 }
 // 현재 편집 중인 설정 정보
@@ -70,6 +89,7 @@ let currentServer = null;
 let currentConfig = null;
 let originalConfig = null;
 let configKeyOrder = null; // 키 순서 정보 저장
+let hasUnsavedChanges = false; // 저장되지 않은 변경사항 추적
 
 // DEFAULT_KEY_ORDER 상수는 이제 사용하지 않으므로 제거합니다.
 
@@ -187,8 +207,6 @@ function parseJsonWithOrder(jsonString) {
  * @returns {Array} [key, value] 쌍의 배열
  */
 function getOrderedEntries(obj, keyOrder = null) {
-  console.log("getOrderedEntries 호출:", { obj: Object.keys(obj), keyOrder });
-
   if (!keyOrder || keyOrder.length === 0) {
     const result = Object.entries(obj);
     console.log(
@@ -206,7 +224,6 @@ function getOrderedEntries(obj, keyOrder = null) {
     if (obj.hasOwnProperty(key)) {
       orderedEntries.push([key, obj[key]]);
       processedKeys.add(key);
-      console.log(`순서대로 추가: ${key}`);
     } else {
       console.log(`keyOrder에 있지만 객체에 없는 키: ${key}`);
     }
@@ -216,14 +233,9 @@ function getOrderedEntries(obj, keyOrder = null) {
   Object.keys(obj).forEach((key) => {
     if (!processedKeys.has(key)) {
       orderedEntries.push([key, obj[key]]);
-      console.log(`추가로 추가: ${key}`);
     }
   });
 
-  console.log(
-    "최종 순서:",
-    orderedEntries.map(([key]) => key)
-  );
   return orderedEntries;
 }
 
@@ -239,7 +251,7 @@ function setCurrentConfig(server, config, original, keyOrder = null) {
   currentConfig = config;
   originalConfig = original;
   configKeyOrder = keyOrder;
-  console.log("설정된 키 순서:", configKeyOrder);
+  resetChangeTracking(); // 새 설정 로드 시 초기화
 }
 
 /**
@@ -306,10 +318,9 @@ function clearConfigEditor() {
 }
 
 /**
- * 동적 설정 에디터 렌더링
+ * 설정 에디터 렌더링
  */
 function renderConfigEditor() {
-  console.log("renderConfigEditor 호출됨");
   const editor = AppUtils.elements.configEditor();
   if (!editor) {
     console.error("configEditor 요소를 찾을 수 없음");
@@ -322,16 +333,6 @@ function renderConfigEditor() {
     return;
   }
 
-  console.log("currentConfig:", currentConfig);
-  console.log("configKeyOrder:", configKeyOrder);
-
-  // 원본 객체의 키 순서 확인
-  console.log("Object.keys(currentConfig):", Object.keys(currentConfig));
-  console.log(
-    "Object.entries(currentConfig) 순서:",
-    Object.entries(currentConfig).map(([key]) => key)
-  );
-
   editor.className = "editor-loaded";
 
   const configContent = editor.querySelector(".config-content");
@@ -342,17 +343,8 @@ function renderConfigEditor() {
 
   configContent.innerHTML = "";
 
-  // 템플릿에서 항목 추가 버튼
-  const addFromTemplateBtn = document.createElement("button");
-  addFromTemplateBtn.className = "btn btn-secondary";
-  addFromTemplateBtn.style.marginBottom = "1rem";
-  addFromTemplateBtn.textContent = "템플릿에서 항목 추가";
-  addFromTemplateBtn.onclick = () => window.openAddFromTemplateModal();
-  configContent.appendChild(addFromTemplateBtn);
-
   try {
-    const form = createDynamicForm(currentConfig, "", configKeyOrder);
-    console.log("createDynamicForm 성공:", form);
+    const form = ConfigEditor.createDynamicForm(currentConfig, "", configKeyOrder);
     configContent.appendChild(form);
   } catch (error) {
     console.error("createDynamicForm 오류:", error);
@@ -360,7 +352,97 @@ function renderConfigEditor() {
 }
 
 /**
- * 동적 폼 생성
+ * 배열을 청크로 나누는 유틸리티 함수
+ */
+function chunkArray(array, chunkSize) {
+  const chunks = [];
+  for (let i = 0; i < array.length; i += chunkSize) {
+    chunks.push(array.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
+/**
+ * 대량 데이터를 청크 단위로 렌더링
+ */
+async function renderLargeConfigChunked(obj, path = "", keyOrder = null, options = {}) {
+  const container = document.createElement("div");
+  
+  // 템플릿 에디터가 아닌 경우에만 템플릿 추가 버튼 표시
+  if (!options.isTemplate && !path) {
+    const addFromTemplateBtn = document.createElement("button");
+    addFromTemplateBtn.className = "btn btn-secondary";
+    addFromTemplateBtn.style.marginBottom = "1rem";
+    addFromTemplateBtn.textContent = "템플릿에서 항목 추가";
+    addFromTemplateBtn.onclick = () => window.openAddFromTemplateModal();
+    container.appendChild(addFromTemplateBtn);
+  }
+
+  // 키 순서를 보존하면서 처리
+  const entries = getOrderedEntries(obj, keyOrder);
+  
+  // 단순 값과 중첩 객체 분리
+  const simpleFields = [];
+  const complexSections = [];
+  
+  entries.forEach(([key, value]) => {
+    const fieldPath = path ? `${path}.${key}` : key;
+    
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      // 중첩 객체는 별도 섹션으로
+      complexSections.push({ key, value, fieldPath });
+    } else {
+      // 단순 값들은 기본 설정 그룹에 포함
+      simpleFields.push({ key, value, fieldPath });
+    }
+  });
+  
+  // 단순 필드들을 기본 설정 그룹으로 생성
+  if (simpleFields.length > 0) {
+    const basicGroup = createBasicSettingsGroup(simpleFields, options);
+    if (basicGroup) {
+      container.appendChild(basicGroup);
+    }
+  }
+  
+  // 대량 중첩 섹션들을 청크로 처리
+  if (complexSections.length > 20) {
+    await renderComplexSectionsChunked(container, complexSections, options);
+  } else {
+    // 적은 양이면 일반 렌더링
+    complexSections.forEach(({ key, value, fieldPath }) => {
+      const section = createConfigSection(key, value, fieldPath, options);
+      if (section) {
+        container.appendChild(section);
+      }
+    });
+  }
+
+  return container;
+}
+
+/**
+ * 대량 섹션을 청크로 렌더링
+ */
+async function renderComplexSectionsChunked(container, complexSections, options) {
+  const chunks = chunkArray(complexSections, 10); // 10개씩 청크
+  
+  for (const chunk of chunks) {
+    // 청크 렌더링
+    chunk.forEach(({ key, value, fieldPath }) => {
+      const section = createConfigSection(key, value, fieldPath, options);
+      if (section) {
+        container.appendChild(section);
+      }
+    });
+    
+    // 브라우저에게 숙쉴 시간 제공
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+
+/**
+ * 동적 폼 생성 - 기본 설정 그룹화 지원 및 성능 최적화
  * @param {object} obj - 설정 객체
  * @param {string} path - 경로
  * @param {Array} keyOrder - 키 순서 정보
@@ -368,53 +450,59 @@ function renderConfigEditor() {
  * @returns {HTMLElement} 폼 요소
  */
 function createDynamicForm(obj, path = "", keyOrder = null, options = {}) {
+  const totalItems = Object.keys(obj).length;
+  
+  // 대량 데이터인 경우 청크 렌더링 사용
+  if (totalItems > 50) {
+    console.log(`대량 데이터 감지: ${totalItems}개 항목, 청크 렌더링 사용`);
+    return renderLargeConfigChunked(obj, path, keyOrder, options);
+  }
+  
+  // 기존 로직 유지 (소량 데이터)
   const container = document.createElement("div");
+  
+  // 템플릿 편집이 아닌 경우에만 템플릿 추가 버튼 표시
+  if (!options.isTemplate && !path) {
+    const addFromTemplateBtn = document.createElement("button");
+    addFromTemplateBtn.className = "btn btn-secondary";
+    addFromTemplateBtn.style.marginBottom = "1rem";
+    addFromTemplateBtn.textContent = "템플릿에서 항목 추가";
+    addFromTemplateBtn.onclick = () => window.openAddFromTemplateModal();
+    container.appendChild(addFromTemplateBtn);
+  }
 
   // 키 순서를 보존하면서 처리
   const entries = getOrderedEntries(obj, keyOrder);
-  console.log(
-    `사용된 키 순서 (path: ${path}):`,
-    entries.map(([key]) => key)
-  );
-
+  
+  // 단순 값과 중첩 객체 분리
+  const simpleFields = [];
+  const complexSections = [];
+  
   entries.forEach(([key, value]) => {
     const fieldPath = path ? `${path}.${key}` : key;
-
-    console.log(`처리 중: ${key}, 타입: ${typeof value}, 값:`, value);
-
+    
     if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      // 중첩 객체는 객체 그룹으로 처리
-      console.log(`중첩 객체 생성: ${key}`);
-      const objectGroup = createNestedObjectField(key, value, fieldPath, options);
-      if (objectGroup) {
-        container.appendChild(objectGroup);
-      }
+      // 중첩 객체는 별도 섹션으로
+      complexSections.push({ key, value, fieldPath });
     } else {
-      // 단순 값들은 개별 필드로 처리
-      console.log(`단순 필드 생성: ${key}`);
-      const field = createDynamicField(key, value, fieldPath, options);
-      if (field) {
-        // DocumentFragment인 경우 직접 스타일을 적용할 수 없으므로
-        // 컨테이너로 감싸서 처리
-        if (field.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-          const wrapper = document.createElement("div");
-          wrapper.style.marginBottom = "1rem";
-          wrapper.appendChild(field);
-          container.appendChild(wrapper);
-        } else if (field.style) {
-          // 일반 DOM 요소인 경우
-          field.style.marginBottom = "1rem";
-          container.appendChild(field);
-        } else {
-          // 기타 경우 - 그냥 추가
-          container.appendChild(field);
-        }
-      } else {
-        console.warn(
-          `createDynamicField가 null을 반환: key=${key}, value=`,
-          value
-        );
-      }
+      // 단순 값들은 기본 설정 그룹에 포함
+      simpleFields.push({ key, value, fieldPath });
+    }
+  });
+  
+  // 단순 필드들을 기본 설정 그룹으로 생성
+  if (simpleFields.length > 0) {
+    const basicGroup = createBasicSettingsGroup(simpleFields, options);
+    if (basicGroup) {
+      container.appendChild(basicGroup);
+    }
+  }
+  
+  // 중첩 객체들은 개별 섹션으로 생성
+  complexSections.forEach(({ key, value, fieldPath }) => {
+    const section = createConfigSection(key, value, fieldPath, options);
+    if (section) {
+      container.appendChild(section);
     }
   });
 
@@ -424,88 +512,315 @@ function createDynamicForm(obj, path = "", keyOrder = null, options = {}) {
 /**
  * 기본 설정 그룹 생성
  * @param {Array} fields - 단순 필드들
- * @param {string} basePath - 기본 경로
+ * @param {object} options - 옵션
  * @returns {HTMLElement} 기본 설정 그룹
  */
-function createBasicSettingsGroup(fields, basePath) {
-  const container = document.createElement("div");
-  container.className = "nested-object-container";
-  container.style.marginBottom = "1rem";
+function createBasicSettingsGroup(fields, options = {}) {
+  const template = document.getElementById("configSectionTemplate");
+  if (!template) {
+    // 폴백: 섹션 템플릿이 없으면 개별 필드로 처리
+    const container = document.createElement("div");
+    fields.forEach(({ key, value, fieldPath }) => {
+      const field = createDynamicField(key, value, fieldPath, options);
+      if (field) {
+        if (field.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+          const wrapper = document.createElement("div");
+          wrapper.style.marginBottom = "1rem";
+          wrapper.appendChild(field);
+          container.appendChild(wrapper);
+        } else {
+          field.style.marginBottom = "1rem";
+          container.appendChild(field);
+        }
+      }
+    });
+    return container;
+  }
 
-  // 기본 설정 헤더
-  const header = document.createElement("div");
-  header.className = "object-header";
-  header.style.cssText = `
-    display: flex;
-    align-items: center;
-    padding: 0.5rem;
-    background: #f8f9fa;
-    border-radius: 4px;
-    border-left: 3px solid #28a745;
-    margin-bottom: 0.5rem;
-    cursor: pointer;
-  `;
+  const clone = template.content.cloneNode(true);
+  const wrapper = document.createElement("div");
+  wrapper.appendChild(clone);
+  const section = wrapper.querySelector(".config-section");
 
-  const toggleIcon = document.createElement("span");
-  toggleIcon.textContent = "📁";
-  toggleIcon.style.marginRight = "0.5rem";
+  if (!section) {
+    return createBasicSettingsGroup(fields, options); // 재귀 호출로 폴백
+  }
 
-  const title = document.createElement("span");
-  title.textContent = `기본 설정 (${fields.length}개 항목)`;
-  title.style.fontWeight = "600";
-  title.style.flex = "1";
+  // 섹션 제목 설정
+  const titleEl = section.querySelector(".section-title");
+  if (titleEl) {
+    titleEl.textContent = `기본 설정 (${fields.length}개 항목)`;
+  }
 
-  header.appendChild(toggleIcon);
-  header.appendChild(title);
+  // 섹션 내용 영역
+  const contentEl = section.querySelector(".section-content");
+  if (contentEl) {
+    // 각 단순 필드를 추가
+    fields.forEach(({ key, value, fieldPath }) => {
+      const field = createDynamicField(key, value, fieldPath, options);
+      if (field) {
+        if (field.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+          const wrapper = document.createElement("div");
+          wrapper.appendChild(field);
+          contentEl.appendChild(wrapper);
+        } else {
+          contentEl.appendChild(field);
+        }
+      }
+    });
+  }
 
-  // 내용 영역
-  const content = document.createElement("div");
-  content.className = "object-content";
-  content.style.cssText = `
-    margin-left: 1.5rem;
-    border-left: 2px solid #e9ecef;
-    padding-left: 1rem;
-    display: block;
-  `;
+  // 기본적으로 확장 상태로 설정
+  if (contentEl) {
+    contentEl.classList.add("expanded");
+  }
+  
+  // 토글 기능
+  const header = section.querySelector(".section-header");
+  const toggle = section.querySelector(".toggle");
+  if (header && toggle && contentEl) {
+    // 초기 토글 아이콘 설정
+    toggle.textContent = "▼";
+    
+    header.onclick = (e) => {
+      if (e.target.classList.contains("btn")) return;
+      
+      const isExpanded = contentEl.classList.contains("expanded");
+      if (isExpanded) {
+        contentEl.classList.remove("expanded");
+        toggle.textContent = "▶";
+      } else {
+        contentEl.classList.add("expanded");
+        toggle.textContent = "▼";
+      }
+    };
+  }
 
-  // 각 단순 필드 추가 - 순서 유지
-  fields.forEach(({ key, value }) => {
-    const fieldPath = basePath ? `${basePath}.${key}` : key;
-    const field = createDynamicField(key, value, fieldPath);
+  // 삭제 버튼 - 템플릿에서는 숨김
+  const deleteBtn = section.querySelector(".section-delete-btn");
+  if (deleteBtn) {
+    if (options.isTemplate) {
+      deleteBtn.style.display = "none";
+    } else {
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        AppUtils.showConfirmDialog("기본 설정 전체를 삭제하시겠습니까?", () => {
+          fields.forEach(({ fieldPath }) => {
+            deleteField(fieldPath);
+          });
+          renderConfigEditor();
+        });
+      };
+    }
+  }
 
+  wrapper.removeChild(section);
+  return section;
+}
+
+/**
+ * 지연 로딩을 지원하는 카드 기반 설정 섹션 생성
+ * @param {string} key - 섹션 키
+ * @param {object} obj - 섹션 객체
+ * @param {string} path - 섹션 경로
+ * @param {object} options - 옵션
+ * @returns {HTMLElement} 섹션 요소
+ */
+function createConfigSection(key, obj, path, options = {}) {
+  const template = document.getElementById("configSectionTemplate");
+  if (!template) {
+    console.error("configSectionTemplate을 찾을 수 없습니다");
+    return createNestedObjectField(key, obj, path, options);
+  }
+
+  const clone = template.content.cloneNode(true);
+  const wrapper = document.createElement("div");
+  wrapper.appendChild(clone);
+  const section = wrapper.querySelector(".config-section");
+
+  if (!section) {
+    console.error("config-section 요소를 찾을 수 없습니다");
+    return createNestedObjectField(key, obj, path, options);
+  }
+
+  // 섹션 제목 설정
+  const titleEl = section.querySelector(".section-title");
+  if (titleEl) {
+    titleEl.textContent = `${key} (${Object.keys(obj).length}개 항목)`;
+  }
+
+  // 섹션 내용 영역
+  const contentEl = section.querySelector(".section-content");
+  
+  // 모든 섹션을 즉시 렌더링 (지연 로딩 제거)
+  renderSectionContent(contentEl, obj, path, options);
+
+  // 기본적으로 확장 상태로 설정
+  if (contentEl) {
+    contentEl.classList.add("expanded");
+  }
+  
+  // 토글 기능
+  const header = section.querySelector(".section-header");
+  const toggle = section.querySelector(".toggle");
+  if (header && toggle && contentEl) {
+    // 초기 토글 아이콘 설정
+    toggle.textContent = "▼";
+    
+    header.onclick = (e) => {
+      if (e.target.classList.contains("btn")) return; // 삭제 버튼 클릭 방지
+      
+      const isExpanded = contentEl.classList.contains("expanded");
+      if (isExpanded) {
+        contentEl.classList.remove("expanded");
+        toggle.textContent = "▶";
+      } else {
+        contentEl.classList.add("expanded");
+        toggle.textContent = "▼";
+      }
+    };
+  }
+
+  // 삭제 버튼 - 템플릿에서는 숨김
+  const deleteBtn = section.querySelector(".section-delete-btn");
+  if (deleteBtn) {
+    if (options.isTemplate) {
+      deleteBtn.style.display = "none";
+    } else {
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        AppUtils.showConfirmDialog(`'${key}' 섹션을 삭제하시겠습니까?`, () => {
+          deleteField(path);
+          renderConfigEditor();
+        });
+      };
+    }
+  }
+
+  wrapper.removeChild(section);
+  return section;
+}
+
+/**
+ * 섹션 컨텐츠 렌더링 (지연 로딩용)
+ */
+function renderSectionContent(contentEl, obj, path, options) {
+  // 각 속성을 필드로 추가
+  Object.entries(obj).forEach(([itemKey, item]) => {
+    const field = createDynamicField(itemKey, item, `${path}.${itemKey}`, options);
     if (field) {
-      // DocumentFragment인 경우 컨테이너로 감싸서 처리
       if (field.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
         const wrapper = document.createElement("div");
-        wrapper.style.marginBottom = "0.5rem";
         wrapper.appendChild(field);
-        content.appendChild(wrapper);
-      } else if (field.style) {
-        // 일반 DOM 요소인 경우
-        field.style.marginBottom = "0.5rem";
-        content.appendChild(field);
+        contentEl.appendChild(wrapper);
       } else {
-        // 기타 경우
-        content.appendChild(field);
+        contentEl.appendChild(field);
       }
-    } else {
-      console.warn(
-        `createDynamicField가 null을 반환: key=${key}, value=${value}`
-      );
     }
   });
+}
 
-  // 헤더 클릭 토글
-  header.onclick = () => {
-    const isVisible = content.style.display !== "none";
-    content.style.display = isVisible ? "none" : "block";
-    toggleIcon.textContent = isVisible ? "📂" : "📁";
-  };
+/**
+ * 지연 로딩 실행
+ */
+function loadSectionContent(contentEl, obj, path, options) {
+  // 로딩 시작
+  const placeholder = contentEl.querySelector('.lazy-placeholder');
+  if (placeholder) {
+    placeholder.querySelector('p').textContent = '로딩 중...';
+    placeholder.querySelector('.lazy-spinner').style.display = 'block';
+  }
+  
+  // 비동기 렌더링 (브라우저 블로킹 방지)
+  setTimeout(() => {
+    // 기존 컨텐츠 제거
+    contentEl.innerHTML = '';
+    
+    // 새 컨텐츠 렌더링
+    renderSectionContent(contentEl, obj, path, options);
+    
+    // 로드 완료 표시
+    contentEl.dataset.loaded = 'true';
+    delete contentEl.dataset.lazyLoad;
+  }, 50); // 50ms 지연으로 브라우저 숙쉴 시간 제공
+}
 
-  container.appendChild(header);
-  container.appendChild(content);
+/**
+ * 단순 필드를 위한 카드 섹션 생성 (템플릿용)
+ * @param {string} key - 필드 키
+ * @param {any} value - 필드 값
+ * @param {string} path - 필드 경로
+ * @param {object} options - 옵션
+ * @returns {HTMLElement} 섹션 요소
+ */
+function createSimpleFieldSection(key, value, path, options = {}) {
+  const template = document.getElementById("configSectionTemplate");
+  if (!template) {
+    return createDynamicField(key, value, path, options); // 폴백
+  }
 
-  return container;
+  const clone = template.content.cloneNode(true);
+  const wrapper = document.createElement("div");
+  wrapper.appendChild(clone);
+  const section = wrapper.querySelector(".config-section");
+
+  if (!section) {
+    return createDynamicField(key, value, path, options);
+  }
+
+  // 섹션 제목
+  const titleEl = section.querySelector(".section-title");
+  if (titleEl) {
+    titleEl.textContent = key;
+  }
+
+  // 섹션 내용
+  const contentEl = section.querySelector(".section-content");
+  if (contentEl) {
+    const field = createDynamicField(key, value, path, options);
+    if (field) {
+      // 필드를 섹션 컨텐츠에 넣고, 레이블은 숨김
+      if (field.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+        const wrapper = document.createElement("div");
+        wrapper.appendChild(field);
+        // 레이블 숨김
+        const label = wrapper.querySelector(".field-label");
+        if (label) label.style.display = "none";
+        contentEl.appendChild(wrapper);
+      } else {
+        const label = field.querySelector(".field-label");
+        if (label) label.style.display = "none";
+        contentEl.appendChild(field);
+      }
+    }
+  }
+
+  // 토글 기능
+  const header = section.querySelector(".section-header");
+  const toggle = section.querySelector(".toggle");
+  if (header && toggle && contentEl) {
+    header.onclick = (e) => {
+      if (e.target.classList.contains("btn")) return;
+      
+      const isExpanded = contentEl.classList.contains("expanded");
+      if (isExpanded) {
+        contentEl.classList.remove("expanded");
+        toggle.textContent = "▶";
+      } else {
+        contentEl.classList.add("expanded");
+        toggle.textContent = "▼";
+      }
+    };
+  }
+
+  // 삭제 버튼 숨김 (템플릿용)
+  const deleteBtn = section.querySelector(".section-delete-btn");
+  if (deleteBtn) {
+    deleteBtn.style.display = "none";
+  }
+
+  wrapper.removeChild(section);
+  return section;
 }
 
 /**
@@ -517,8 +832,6 @@ function createBasicSettingsGroup(fields, basePath) {
  * @returns {HTMLElement} 필드 요소
  */
 function createDynamicField(key, value, path, options = {}) {
-  console.log(`createDynamicField: key=${key}, value=`, value, `path=${path}`);
-
   try {
     if (typeof value === "boolean") {
       return createCheckboxField(key, value, path, options);
@@ -529,8 +842,7 @@ function createDynamicField(key, value, path, options = {}) {
     } else if (Array.isArray(value)) {
       return createArrayField(key, value, path, options);
     } else if (typeof value === "object" && value !== null) {
-      // 중첩 객체는 여기서 처리하지 말고 경고 메시지
-      console.warn(`중첩 객체가 createDynamicField로 전달됨: ${key}`);
+      // 중첩 객체는 일반 편집과 동일하게 처리
       return createNestedObjectField(key, value, path, options);
     } else {
       // null, undefined 등
@@ -577,7 +889,7 @@ function createTextField(key, value, path, options = {}) {
     }
   });
 
-  // 삭제 버튼 이벤트 - 템플릿에서는 삭제 버튼 숨김
+  // 삭제 버튼 이벤트 - 호버 시에만 표시
   const deleteBtn = clone.querySelector(".field-delete-btn");
   if (options.isTemplate) {
     deleteBtn.style.display = "none";
@@ -616,7 +928,7 @@ function createNumberField(key, value, path, options = {}) {
     }
   });
 
-  // 삭제 버튼 이벤트 - 템플릿에서는 삭제 버튼 숨김
+  // 삭제 버튼 이벤트 - 호버 시에만 표시
   const deleteBtn = clone.querySelector(".field-delete-btn");
   if (options.isTemplate) {
     deleteBtn.style.display = "none";
@@ -632,7 +944,7 @@ function createNumberField(key, value, path, options = {}) {
 }
 
 /**
- * 체크박스 필드 생성
+ * 체크박스 필드 생성 (가로 배치)
  * @param {string} key - 필드 키
  * @param {boolean} value - 필드 값
  * @param {string} path - 필드 경로
@@ -640,38 +952,54 @@ function createNumberField(key, value, path, options = {}) {
  * @returns {HTMLElement} 체크박스 필드 요소
  */
 function createCheckboxField(key, value, path, options = {}) {
-  const template = document.getElementById("checkboxFieldTemplate");
-  const clone = template.content.cloneNode(true);
-
-  clone.querySelector(".field-label").textContent = key;
-  const checkbox = clone.querySelector(".field-checkbox");
+  const fieldGroup = document.createElement('div');
+  fieldGroup.className = 'field-checkbox-group';
+  
+  // 레이블
+  const label = document.createElement('label');
+  label.className = 'field-label';
+  label.textContent = key;
+  label.setAttribute('for', `checkbox_${path.replace(/\./g, '_')}`);
+  
+  // 체크박스
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.className = 'field-checkbox';
+  checkbox.id = `checkbox_${path.replace(/\./g, '_')}`;
   checkbox.checked = value;
-
-  checkbox.addEventListener("change", () => {
+  
+  checkbox.addEventListener('change', () => {
     if (options.isTemplate) {
       updateTemplateValue(path, checkbox.checked);
     } else {
       updateConfigValue(path, checkbox.checked);
     }
   });
-
-  // 삭제 버튼 이벤트 - 템플릿에서는 삭제 버튼 숨김
-  const deleteBtn = clone.querySelector(".field-delete-btn");
+  
+  // 삭제 버튼
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'btn btn-danger btn-mini field-delete-btn';
+  deleteBtn.textContent = '삭제';
+  
   if (options.isTemplate) {
-    deleteBtn.style.display = "none";
+    deleteBtn.style.display = 'none';
   } else {
     deleteBtn.onclick = () => {
-      AppUtils.showConfirmDialog(`'${key}' 필드를 삭제하시겠습니까?`, () => {
-        deleteField(path);
-      });
+      AppUtils.showConfirmDialog(`'${key}' 필드를 삭제하시겠습니까?`, () =>
+        deleteField(path)
+      );
     };
   }
-
-  return clone;
+  
+  fieldGroup.appendChild(label);
+  fieldGroup.appendChild(checkbox);
+  fieldGroup.appendChild(deleteBtn);
+  
+  return fieldGroup;
 }
 
 /**
- * 배열 필드 생성 (테이블 스타일)
+ * 배열 필드 생성 (테이블 스타일, 가로 배치)
  * @param {string} key - 필드 키
  * @param {Array} array - 배열 값
  * @param {string} path - 필드 경로
@@ -694,6 +1022,9 @@ function createArrayField(key, array, path, options = {}) {
     console.error("field-group 요소를 찾을 수 없습니다");
     return null;
   }
+  
+  // 배열 필드 클래스 추가
+  fieldGroup.classList.add('array-field');
 
   const label = fieldGroup.querySelector(".field-label");
   const tbody = fieldGroup.querySelector(".array-tbody");
@@ -792,7 +1123,7 @@ function createArrayRow(item, itemPath, index, options = {}) {
     }
   }
 
-  // 삭제 버튼 - 템플릿에서는 숨김
+  // 삭제 버튼 - 호버 시에만 표시
   if (deleteBtn) {
     if (options.isTemplate) {
       deleteBtn.style.display = "none";
@@ -810,226 +1141,109 @@ function createArrayRow(item, itemPath, index, options = {}) {
 }
 
 /**
- * 중첩 객체 필드 생성 (계층적 들여쓰기 방식)
+ * 중첩 객체 필드 생성 (카드 섹션 통일)
  * @param {string} key - 필드 키
  * @param {object} obj - 객체 값
  * @param {string} path - 필드 경로
+ * @param {object} options - 옵션
  * @returns {HTMLElement} 중첩 객체 필드 요소
  */
 function createNestedObjectField(key, obj, path, options = {}) {
-  const container = document.createElement("div");
-  container.className = "nested-object-container";
-  container.style.marginBottom = "1rem";
-
-  // 객체 헤더
-  const header = document.createElement("div");
-  header.className = "object-header";
-  header.style.cssText = `
-    display: flex;
-    align-items: center;
-    padding: 0.5rem;
-    background: #f8f9fa;
-    border-radius: 4px;
-    border-left: 3px solid #007bff;
-    margin-bottom: 0.5rem;
-    cursor: pointer;
-  `;
-
-  // 폴더 아이콘 및 제목
-  const toggleIcon = document.createElement("span");
-  toggleIcon.textContent = "📁";
-  toggleIcon.style.marginRight = "0.5rem";
-
-  const title = document.createElement("span");
-  title.textContent = `${key} (${Object.keys(obj).length}개 속성)`;
-  title.style.fontWeight = "600";
-  title.style.flex = "1";
-
-  header.appendChild(toggleIcon);
-  header.appendChild(title);
-
-  // 삭제 버튼 - 템플릿에서는 숨김
-  if (!options.isTemplate) {
-    const deleteBtn = document.createElement("button");
-    deleteBtn.className = "btn btn-danger btn-mini";
-    deleteBtn.textContent = "전체 삭제";
-    deleteBtn.style.marginLeft = "0.5rem";
-
-    deleteBtn.onclick = (e) => {
-      e.stopPropagation();
-      console.log("삭제 버튼 클릭:", key, path);
-      AppUtils.showConfirmDialog(`'${key}' 객체 전체를 삭제하시겠습니까?`, () =>
-        deleteField(path)
-      );
-    };
-
-    header.appendChild(deleteBtn);
-  }
-
-  // 속성 목록 컨테이너
-  const content = document.createElement("div");
-  content.className = "object-content";
-  content.style.cssText = `
-    margin-left: 1.5rem;
-    border-left: 2px solid #e9ecef;
-    padding-left: 1rem;
-    display: block;
-  `;
-
-  // 각 속성을 들여쓰기로 표시 - 순서 유지
-  const entries = Object.entries(obj);
-  entries.forEach(([itemKey, item]) => {
-    const itemRow = createPropertyRow(itemKey, item, `${path}.${itemKey}`, options);
-    content.appendChild(itemRow);
-  });
-
-  // 헤더 클릭시 토글
-  header.onclick = (e) => {
-    // 삭제 버튼 클릭시 토글 방지
-    if (e.target.classList.contains('btn')) {
-      return;
-    }
-    const isVisible = content.style.display !== "none";
-    content.style.display = isVisible ? "none" : "block";
-    toggleIcon.textContent = isVisible ? "📂" : "📁";
-  };
-
-  container.appendChild(header);
-  container.appendChild(content);
-
-  return container;
+  // createConfigSection과 동일한 카드 섹션 사용
+  return createConfigSection(key, obj, path, options);
 }
 
+// createPropertyRow 함수 제거 - 더 이상 사용되지 않음
+
 /**
- * 속성 행 생성 (간단한 key-value 형태)
- * @param {string} key - 속성 키
- * @param {any} value - 속성 값
- * @param {string} itemPath - 속성 경로
- * @param {object} options - 옵션 {isTemplate: boolean}
- * @returns {HTMLElement} 속성 행 요소
+ * 저장되지 않은 변경사항 UI 업데이트
  */
-function createPropertyRow(key, value, itemPath, options = {}) {
-  const row = document.createElement("div");
-  row.className = "property-row";
-  row.style.cssText = `
-    display: flex;
-    align-items: center;
-    padding: 0.25rem 0;
-    border-bottom: 1px solid #f1f3f4;
-    margin-bottom: 0.25rem;
-  `;
-
-  // 속성명
-  const nameSpan = document.createElement("span");
-  nameSpan.textContent = key;
-  nameSpan.style.cssText = `
-    font-weight: 500;
-    min-width: 120px;
-    color: #495057;
-  `;
-
-  // 값 입력 영역
-  const valueContainer = document.createElement("div");
-  valueContainer.style.cssText = `
-    flex: 1;
-    margin: 0 0.5rem;
-  `;
-
-  // 값 타입별 입력 요소 생성
-  let inputElement;
-  if (typeof value === "boolean") {
-    inputElement = document.createElement("input");
-    inputElement.type = "checkbox";
-    inputElement.checked = value;
-    inputElement.addEventListener("change", () => {
-      if (options.isTemplate) {
-        updateTemplateValue(itemPath, inputElement.checked);
-      } else {
-        updateConfigValue(itemPath, inputElement.checked);
-      }
-    });
-  } else if (typeof value === "number") {
-    inputElement = document.createElement("input");
-    inputElement.type = "number";
-    inputElement.value = value;
-    inputElement.style.width = "100px";
-    inputElement.addEventListener("change", () => {
-      if (options.isTemplate) {
-        updateTemplateValue(itemPath, parseInt(inputElement.value) || 0);
-      } else {
-        updateConfigValue(itemPath, parseInt(inputElement.value) || 0);
-      }
-    });
-  } else if (typeof value === "string") {
-    inputElement = document.createElement("input");
-    inputElement.type = "text";
-    inputElement.value = value;
-    inputElement.style.width = "200px";
-    if (value.includes("http") || key.toLowerCase().includes("url")) {
-      inputElement.classList.add("url-field");
-    }
-    inputElement.addEventListener("change", () => {
-      if (options.isTemplate) {
-        updateTemplateValue(itemPath, inputElement.value);
-      } else {
-        updateConfigValue(itemPath, inputElement.value);
-      }
-    });
-  } else if (Array.isArray(value)) {
-    inputElement = document.createElement("textarea");
-    inputElement.value = JSON.stringify(value, null, 2);
-    inputElement.rows = 2;
-    inputElement.style.width = "200px";
-    inputElement.addEventListener("change", () => {
-      try {
-        const parsed = JSON.parse(inputElement.value);
-        if (options.isTemplate) {
-          updateTemplateValue(itemPath, parsed);
-        } else {
-          updateConfigValue(itemPath, parsed);
-        }
-        inputElement.style.borderColor = "";
-      } catch (e) {
-        inputElement.style.borderColor = "#e74c3c";
-      }
-    });
-  } else if (typeof value === "object" && value !== null) {
-    // 중첩 객체는 재귀 호출
-    return createNestedObjectField(key, value, itemPath, options);
-  } else {
-    inputElement = document.createElement("span");
-    inputElement.textContent = String(value);
-    inputElement.style.color = "#6c757d";
-    inputElement.style.fontStyle = "italic";
-  }
-
-  valueContainer.appendChild(inputElement);
-
-  // 삭제 버튼 - 템플릿에서는 숨김
-  row.appendChild(nameSpan);
-  row.appendChild(valueContainer);
+function updateUnsavedChangesUI() {
+  const title = document.querySelector('title');
+  const serverTitle = document.getElementById('currentServerTitle');
   
-  if (!options.isTemplate) {
-    const deleteBtn = document.createElement("button");
-    deleteBtn.className = "btn btn-danger btn-mini";
-    deleteBtn.textContent = "삭제";
-    deleteBtn.style.fontSize = "0.7rem";
-
-    deleteBtn.onclick = () => {
-      console.log("속성 삭제 버튼 클릭:", key, itemPath);
-      AppUtils.showConfirmDialog(`'${key}' 속성을 삭제하시겠습니까?`, () =>
-        deleteField(itemPath)
-      );
-    };
-
-    row.appendChild(deleteBtn);
+  if (hasUnsavedChanges) {
+    if (title) title.textContent = '* EzTalk 설정 관리자';
+    if (serverTitle && currentServer) {
+      serverTitle.textContent = `* ${currentServer.name}${currentServer.latestFile ? ` - ${currentServer.latestFile}` : ''}`;
+    }
+  } else {
+    if (title) title.textContent = 'EzTalk 설정 관리자';
+    if (serverTitle && currentServer) {
+      serverTitle.textContent = `${currentServer.name}${currentServer.latestFile ? ` - ${currentServer.latestFile}` : ''}`;
+    }
   }
-
-  return row;
 }
 
 /**
- * 설정 값 업데이트
+ * 변경사항 표시 및 경고 설정
+ */
+function markAsChanged() {
+  if (!hasUnsavedChanges) {
+    hasUnsavedChanges = true;
+    updateUnsavedChangesUI();
+    console.log('변경사항 감지: 페이지 나가기 경고 활성화');
+  }
+}
+
+/**
+ * 현재 설정 설정 시 변경사항 플래그 초기화
+ */
+function resetChangeTracking() {
+  if (hasUnsavedChanges) {
+    hasUnsavedChanges = false;
+    updateUnsavedChangesUI();
+    console.log('새 설정 로드: 페이지 나가기 경고 비활성화');
+  }
+}
+
+/**
+ * 키 순서를 보존하며 객체에 새 프로퍼티 추가
+ * @param {object} obj - 대상 객체
+ * @param {string} key - 추가할 키
+ * @param {any} value - 값
+ * @param {Array} keyOrder - 키 순서 배열
+ */
+function setPropertyPreservingOrder(obj, key, value, keyOrder) {
+  if (key in obj) {
+    // 기존 키인 경우 단순 대입
+    obj[key] = value;
+  } else {
+    // 새 키인 경우 순서 보존하여 추가
+    const newObj = {};
+    
+    // 1. 기존 keyOrder에 있는 키들 먼저
+    if (keyOrder) {
+      keyOrder.forEach(orderedKey => {
+        if (orderedKey in obj) {
+          newObj[orderedKey] = obj[orderedKey];
+        }
+      });
+    }
+    
+    // 2. keyOrder에 없는 기존 키들
+    Object.keys(obj).forEach(objKey => {
+      if (!keyOrder || !keyOrder.includes(objKey)) {
+        newObj[objKey] = obj[objKey];
+      }
+    });
+    
+    // 3. 새 키 추가
+    newObj[key] = value;
+    
+    // 4. 원본 객체의 모든 프로퍼티 삭제 후 새 객체로 복사
+    Object.keys(obj).forEach(key => delete obj[key]);
+    Object.assign(obj, newObj);
+    
+    // 5. configKeyOrder 업데이트
+    if (keyOrder && obj === currentConfig) {
+      configKeyOrder = [...(keyOrder || []), key].filter((k, i, arr) => arr.indexOf(k) === i);
+    }
+  }
+}
+
+/**
+ * 설정 값 업데이트 (키 순서 보존)
  * @param {string} path - 설정 경로
  * @param {any} value - 새 값
  */
@@ -1038,6 +1252,7 @@ function updateConfigValue(path, value) {
 
   const keys = path.split(".");
   let current = currentConfig;
+  let currentKeyOrder = configKeyOrder;
 
   for (let i = 0; i < keys.length - 1; i++) {
     const key = keys[i];
@@ -1045,8 +1260,10 @@ function updateConfigValue(path, value) {
       const [arrayKey, indexStr] = key.split("[");
       const index = parseInt(indexStr.replace("]", ""));
       current = current[arrayKey][index];
+      currentKeyOrder = null; // 배열 내부는 순서 공지 없음
     } else {
       current = current[key];
+      currentKeyOrder = null; // 중첩 객체는 순서 공지 없음
     }
   }
 
@@ -1056,8 +1273,16 @@ function updateConfigValue(path, value) {
     const index = parseInt(indexStr.replace("]", ""));
     current[arrayKey][index] = value;
   } else {
-    current[finalKey] = value;
+    // 최상위 레벨인 경우에만 키 순서 보존
+    if (current === currentConfig && keys.length === 1) {
+      setPropertyPreservingOrder(current, finalKey, value, configKeyOrder);
+    } else {
+      current[finalKey] = value;
+    }
   }
+  
+  // 변경사항 표시
+  markAsChanged();
 
   AppUtils.updateStatus(`${path} 설정이 변경되었습니다.`);
 }
@@ -1093,6 +1318,9 @@ function deleteField(path) {
   } else {
     delete current[lastKey];
   }
+  
+  // 변경사항 표시
+  markAsChanged();
 
   renderConfigEditor();
   AppUtils.updateStatus(`${path} 필드가 삭제되었습니다.`);
@@ -1179,6 +1407,24 @@ function addSelectedTemplateItems(selectedPaths) {
   AppUtils.updateStatus(`템플릿에서 ${addedCount}개 항목을 추가했습니다.`);
 }
 
+/**
+ * 저장 완료 표시
+ */
+function markAsSaved() {
+  if (hasUnsavedChanges) {
+    hasUnsavedChanges = false;
+    updateUnsavedChangesUI();
+    console.log('변경사항 저장됨: 페이지 나가기 경고 비활성화');
+  }
+}
+
+/**
+ * 변경사항 여부 확인
+ */
+function hasChanges() {
+  return hasUnsavedChanges;
+}
+
 // 내보내기
 window.ConfigEditor = {
   setCurrentConfig,
@@ -1186,10 +1432,17 @@ window.ConfigEditor = {
   updateServerInfo,
   clearConfigEditor,
   renderConfigEditor,
-  renderTemplateEditor, // 새로 추가
+  renderTemplateEditor,
   addSelectedTemplateItems,
   parseJsonWithOrder,
-  getDefaultKeyOrder, // 변경됨
+  getDefaultKeyOrder,
+  markAsSaved,
+  hasChanges,
+
+  // 동적 폼 생성 함수들
+  createDynamicForm,
+  createConfigSection,
+  createSimpleFieldSection,
 
   // 필드 생성 함수들
   createTextField,
@@ -1197,5 +1450,5 @@ window.ConfigEditor = {
   createCheckboxField,
   createArrayField,
   createNestedObjectField,
-  updateTemplateValue, // 새로 추가
+  updateTemplateValue,
 };
